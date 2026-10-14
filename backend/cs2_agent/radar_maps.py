@@ -4,9 +4,15 @@ import re
 import struct
 from PIL import Image
 from .casebook import ROOT
-from .free_lab import available
+from .free_lab import MAPS
 
 BASE=ROOT/'data/maps/radar'
+
+def available():
+    """Maps whose radar texture and overview transform are installed. Independent of the utility lab's
+    collision data, so a replay still gets its radar on machines without it."""
+    return [m for m in MAPS if (BASE/'resource/overviews'/(m+'.txt')).exists()
+            and (BASE/'panorama/images/overheadmaps'/(m+'_radar_psd.png')).exists()]
 
 def metadata(name):
     if name not in available():raise ValueError('Unsupported radar map')
