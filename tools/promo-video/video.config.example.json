@@ -1,0 +1,10 @@
+{
+  "app": "http://127.0.0.1:8790",
+  "out": "out/roundcrafter_zh.mp4",
+  "match": null,
+  "round": null,
+  "anonymize": "others",
+  "python": "python",
+  "lab": { "map": "de_dust2", "mode": "auto", "origin": null, "target": null },
+  "skip": []
+}

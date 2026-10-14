@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Noto+Sans+SC:wght@400;500;700;900&family=Space+Mono:wght@400;700&display=block">
+<style>
+:root{--bg:#08090b;--bg2:#0d0f12;--panel:#111317;--line:#23272e;--line2:#343a43;--ink:#ece6d6;--ink2:#c9c3b4;--dim:#958f82;--mute:#6a6760;
+--red:#fc3d21;--amber:#ffb23f;--cyan:#6fd0e6;--green:#82d68f;--t:#f0b34a;--ct:#62b6e6;
+--head:"Barlow Condensed","Noto Sans SC",sans-serif;--zh:"Noto Sans SC","Microsoft YaHei","PingFang SC","WenQuanYi Zen Hei",sans-serif;--mono:"Space Mono","Noto Sans SC",monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:var(--ink);font-family:var(--zh)}
+#stage{position:absolute;inset:0;background:radial-gradient(circle at 1px 1px,#ffffff0d 1px,transparent 0) 0 0/28px 28px,radial-gradient(ellipse at 50% 45%,#141619 0%,#08090b 70%)}
+.hud{position:absolute;left:0;right:0;top:0;height:64px;display:flex;align-items:center;gap:28px;padding:0 56px;border-bottom:1px solid var(--line2);background:#060708e6;z-index:20;font:400 15px var(--mono);letter-spacing:.18em;color:var(--dim)}
+.hud:after{content:"";position:absolute;left:0;right:0;bottom:-4px;height:2px;background:repeating-linear-gradient(90deg,var(--red) 0 54px,transparent 54px 62px);opacity:.85}
+.hud .brand{display:flex;align-items:center;gap:12px;font:700 24px var(--head);letter-spacing:.14em;color:var(--ink)}
+.hud .brand i{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--red);color:#fff;font:700 12px var(--mono);font-style:normal;letter-spacing:0}
+.hud .rec{color:var(--red)}
+.hud .sp{margin-left:auto}
+.hud b{color:var(--amber);font-weight:400}
+.corner{position:absolute;width:30px;height:30px;border:3px solid var(--amber);z-index:20}
+.c1{left:28px;top:84px;border-right:0;border-bottom:0}.c2{right:28px;top:84px;border-left:0;border-bottom:0}
+.c3{left:28px;bottom:28px;border-right:0;border-top:0}.c4{right:28px;bottom:28px;border-left:0;border-top:0}
+.progress{position:absolute;left:0;bottom:0;height:5px;background:var(--red);z-index:21}
+.sub{position:absolute;left:0;right:0;bottom:64px;display:flex;justify-content:center;z-index:19}
+.sub span{font:500 46px/1.35 var(--zh);color:#fff;background:#000000b8;padding:10px 30px;border-left:4px solid var(--red);letter-spacing:.02em}
+.scene{position:absolute;left:0;right:0;top:64px;bottom:0;opacity:0}
+.eyebrow{font:700 22px var(--mono);letter-spacing:.24em;color:var(--dim)}
+.eyebrow b{color:var(--red)}
+.h1{font:900 96px/1.08 var(--zh);letter-spacing:.01em}
+.h2{font:900 72px/1.12 var(--zh)}
+.red{color:var(--red)}.amber{color:var(--amber)}.cyan{color:var(--cyan)}.green{color:var(--green)}
+.frame{position:absolute;border:1px solid var(--line2);background:var(--panel);padding:12px}
+.frame:before,.frame:after{content:"";position:absolute;width:22px;height:22px;border:3px solid var(--amber)}
+.frame:before{left:-8px;top:-8px;border-right:0;border-bottom:0}.frame:after{right:-8px;bottom:-8px;border-left:0;border-top:0}
+.frame img{display:block;width:100%;height:100%;object-fit:cover}
+.chip{position:absolute;font:700 30px var(--zh);padding:14px 24px;background:#0b0c0ef2;border:1px solid var(--line2);border-left:5px solid var(--red);white-space:nowrap}
+.chip small{display:block;font:400 16px var(--mono);letter-spacing:.16em;color:var(--dim);margin-bottom:4px}
+.row{display:grid;grid-template-columns:120px 170px 1fr;gap:24px;align-items:center;padding:20px 26px;border-bottom:1px solid var(--line);font:500 32px var(--zh)}
+.tag{font:700 22px var(--mono);color:var(--cyan);border:1px solid #6fd0e680;padding:4px 10px;text-align:center}
+.log{font:400 30px/1.5 var(--mono)}
+.log .l{display:grid;grid-template-columns:150px 1fr;gap:20px;padding:14px 26px;border-left:4px solid transparent}
+.log time{color:var(--mute);font-size:22px;padding-top:6px}
+.log code{color:var(--cyan);font-weight:700}
+.log .ret{display:block;color:var(--ink2);font:400 26px var(--zh)}
+.log .audit{border-left-color:var(--red);background:#fc3d2114}.log .audit code{color:var(--red)}
+.card{position:absolute;background:var(--panel);border:1px solid var(--line2);padding:36px 42px}
+.card:before{content:"";position:absolute;left:-1px;top:-1px;bottom:-1px;width:6px;background:var(--t)}
+.dl{display:grid;grid-template-columns:150px 1fr;gap:18px 26px;font:400 30px/1.45 var(--zh);color:var(--ink2)}
+.dl dt{font:700 20px/2 var(--mono);letter-spacing:.16em;color:var(--amber)}
+.btn{display:inline-block;font:700 26px var(--zh);color:#fff;background:var(--red);padding:14px 26px}
+.tile{position:absolute;background:var(--bg);border:1px solid var(--line2);padding:34px 32px;width:390px;height:330px}
+.tile .k{font:700 20px var(--mono);letter-spacing:.2em;color:var(--red)}
+.tile h3{font:900 46px var(--zh);margin:16px 0 14px}
+.tile p{font:400 24px/1.5 var(--zh);color:var(--ink2)}
+.tile .bud{position:absolute;left:32px;right:32px;bottom:28px;border-top:1px dashed var(--line2);padding-top:14px;font:700 22px var(--mono);color:var(--amber)}
+.step{position:absolute;width:390px;height:250px;border:1px solid var(--line2);background:var(--panel);padding:30px}
+.step .t{font:700 20px var(--mono);letter-spacing:.2em;color:var(--cyan)}
+.step h3{font:900 52px var(--zh);margin:10px 0}
+.step p{font:400 24px/1.45 var(--zh);color:var(--dim)}
+.pchip{position:absolute;font:700 34px var(--zh);padding:16px 28px;border:1px solid var(--line2);background:var(--panel);white-space:nowrap}
+.big-logo{display:grid;place-items:center;width:150px;height:150px;border-radius:50%;background:var(--red);color:#fff;font:700 54px var(--mono)}
+</style></head>
+<body><div id="stage">
+<div class="hud"><span class="brand"><i>RC</i>ROUNDCRAFTER</span><span class="rec">● REC</span><span>MISSION LOG // CS2 DEMO ANALYSIS</span><span class="sp">T+<b id="tc">00:00.00</b></span><span id="sc">01 / 11</span></div>
+<div class="corner c1"></div><div class="corner c2"></div><div class="corner c3"></div><div class="corner c4"></div>
+
+<!-- S01 title -->
+<div class="scene" id="s01">
+  <div id="s01logo" class="big-logo" style="position:absolute;left:885px;top:170px">RC</div>
+  <div id="s01name" style="position:absolute;left:0;right:0;top:360px;text-align:center;font:800 190px/1 var(--head);letter-spacing:.06em"></div>
+  <div id="s01rule" style="position:absolute;left:460px;top:575px;height:4px;background:repeating-linear-gradient(90deg,var(--red) 0 54px,transparent 54px 62px)"></div>
+  <div id="s01tag" class="h2" style="position:absolute;left:0;right:0;top:620px;text-align:center"></div>
+  <div id="s01meta" class="eyebrow" style="position:absolute;left:0;right:0;top:740px;text-align:center">CS2 DEMO 分析 · 本地运行 · <b>AI 分析师</b></div>
+</div>
+
+<!-- S05 mission log -->
+<div class="scene" id="s05">
+  <div class="eyebrow" style="position:absolute;left:150px;top:110px"><b>■</b> MISSION LOG · DE_DUST2 R6</div>
+  <div class="log" id="s05log" style="position:absolute;left:150px;top:170px;width:1620px;border:1px solid var(--line2);background:#050607;padding:16px 0">
+    <div class="l"><time>T+00.0</time><div><code>read_round_evidence()</code><span class="ret">→ 本回合的事实与可验证假设</span></div></div>
+    <div class="l"><time>T+06.2</time><div><code>read_action_window(18, 34)</code><span class="ret">→ 30 秒内的玩家状态与事件</span></div></div>
+    <div class="l"><time>T+19.8</time><div><code>submit_findings(…)</code><span class="ret">→ 每个证据编号都在证据包里 ✓</span></div></div>
+    <div class="l audit"><time>LOCAL</time><div><code>audit</code><span class="ret">→ 删除 1 条：道具与进点没有空间关联</span></div></div>
+  </div>
+  <div id="s05foot" style="position:absolute;left:150px;top:820px;font:400 24px var(--mono);color:var(--dim)">调用 2 / 5 · 输入上限 5 万 token · 限时 300 秒</div>
+</div>
+
+<!-- S06 finding card -->
+<div class="scene" id="s06">
+  <div class="card" id="s06card" style="left:330px;top:90px;width:1260px">
+    <div style="display:flex;justify-content:space-between;font:400 20px var(--mono);letter-spacing:.16em;color:var(--dim)"><span>FINDING 1 / 3</span><span style="background:var(--ink2);color:#111;padding:2px 10px">示例输出</span></div>
+    <div style="font:900 54px var(--zh);margin:18px 0 26px">T 方先控中路，再分兵打 B</div>
+    <div class="dl">
+      <dt id="d1">事实</dt><dd id="e1"><span class="tag">E4</span> 0:22 到达中路上端 · <span class="tag">E7</span> 0:24 中路烟 · <span class="tag">E9</span> 0:41 进 B</dd>
+      <dt id="d2">推断</dt><dd id="e2">中路烟切断了 CT 回防路线，进点时 B 区只有一名防守者。</dd>
+      <dt id="d3">不确定</dt><dd id="e3">demo 不含语音，战术意图是根据走位推断的。</dd>
+      <dt id="d4">建议</dt><dd id="e4">CT 应在中路烟落下前，保留一名可以从 B 洞回防的队员。</dd>
+    </div>
+    <div style="margin-top:30px"><span class="btn" id="s06btn">▶ 重播 0:18 – 0:42</span></div>
+  </div>
+</div>
+
+<!-- S07 modes -->
+<div class="scene" id="s07">
+  <div class="eyebrow" style="position:absolute;left:130px;top:110px"><b>■</b> 4 MODES · 四种模式</div>
+  <div class="tile" id="m1" style="left:130px;top:190px"><div class="k">MODE A</div><h3>单回合解读</h3><p>逐个时间窗核对双方行动</p><div class="bud">≤ 5 次调用 / 回合</div></div>
+  <div class="tile" id="m2" style="left:545px;top:190px"><div class="k">MODE B</div><h3>整场复盘</h3><p>并行解读整场，总预算由你设定</p><div class="bud">1–200 次 · 30 分钟</div></div>
+  <div class="tile" id="m3" style="left:960px;top:190px"><div class="k">MODE C</div><h3>多回合规律</h3><p>在筛选出的回合中找重复习惯</p><div class="bud">≤ 2 次调用</div></div>
+  <div class="tile" id="m4" style="left:1375px;top:190px"><div class="k">MODE D</div><h3>职业对照</h3><p>检索相似的职业回合，解释区别</p><div class="bud">≤ 2 次调用</div></div>
+</div>
+
+<!-- S08 RAG -->
+<div class="scene" id="s08">
+  <div class="eyebrow" style="position:absolute;left:130px;top:100px"><b>■</b> HYBRID VECTOR RAG · 混合向量检索</div>
+  <div class="step" id="r1" style="left:130px;top:160px"><div class="t">STEP 1</div><h3>硬过滤</h3><p>地图 · 阵营 · 包点 · 阶段 · 下包状态</p></div>
+  <div class="step" id="r2" style="left:545px;top:160px"><div class="t">STEP 2</div><h3>向量化</h3><p>本地模型或向量 API；对局情境在本机计算</p></div>
+  <div class="step" id="r3" style="left:960px;top:160px"><div class="t">STEP 3</div><h3>混合排序</h3><p>语义相似度 65% + 关键词 35%</p></div>
+  <div class="step" id="r4" style="left:1375px;top:160px"><div class="t">STEP 4</div><h3>引用</h3><p>结果进入证据包，结论引用编号</p></div>
+  <div id="s08q" style="position:absolute;left:230px;top:520px;font:900 76px var(--zh);border:2px solid var(--cyan);padding:18px 40px">回防 B 区</div>
+  <div id="s08line" style="position:absolute;left:660px;top:585px;height:4px;background:linear-gradient(90deg,var(--cyan),var(--amber))"></div>
+  <div id="s08d" style="position:absolute;left:1120px;top:500px;width:640px;border:1px solid var(--line2);background:var(--panel);padding:24px 30px">
+    <div class="eyebrow">ENGLISH NOTE</div>
+    <div style="font:700 38px/1.3 var(--mono);margin:10px 0 18px">Retake B through tunnels</div>
+    <div style="display:flex;align-items:center;gap:18px;font:700 26px var(--mono);color:var(--amber)"><div style="flex:1;height:14px;background:var(--line)"><div id="s08bar" style="height:100%;background:var(--amber)"></div></div><span id="s08sim">0.00</span></div>
+  </div>
+</div>
+
+<!-- S11 outro -->
+<div class="scene" id="s11">
+  <div id="s11logo" class="big-logo" style="position:absolute;left:885px;top:130px">RC</div>
+  <div style="position:absolute;left:0;right:0;top:310px;text-align:center;font:800 160px/1 var(--head);letter-spacing:.06em">ROUNDCRAFTER</div>
+  <div class="h2" style="position:absolute;left:0;right:0;top:500px;text-align:center">每一回合，<span class="red">都有据可查。</span></div>
+  <div id="s11links" style="position:absolute;left:0;right:0;top:640px;text-align:center;font:700 34px/1.7 var(--mono);color:var(--ink2)">
+    <div>github.com/<span class="amber">ethany14/Cs2-Roundcrafter</span></div>
+    <div style="font-size:26px;color:var(--dim)">开源 · 本地运行 · 中文 / English</div>
+  </div>
+</div>
+
+<div class="sub"><span id="sub" style="visibility:hidden"></span></div>
+<div class="progress" id="prog"></div><div id="fadeov" style="position:absolute;inset:0;background:#000;opacity:0;z-index:30"></div><div id="tag" style="position:absolute;right:64px;top:96px;z-index:22;font:700 18px var(--mono);letter-spacing:.18em;color:var(--amber);border:1px solid #ffb23f80;padding:6px 14px;background:#08090bcc">示意 · ILLUSTRATION</div>
+</div>
+<script>
+let TL=null;
+const $=id=>document.getElementById(id);
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease=x=>{x=clamp(x);return x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2};
+const out=x=>{x=clamp(x);return 1-Math.pow(1-x,3)};
+const pr=(u,a,b)=>out((u-a)/(b-a));
+function show(el,p,dy=30,dx=0){el.style.opacity=p;el.style.transform=`translate(${dx*(1-p)}px,${dy*(1-p)}px)`}
+const NAME='ROUNDCRAFTER',TAG='每一回合，都有据可查。';
+// Chapter cards are generated from the shot list: {id:'chapN', k:'02', en:'MULTI-ROUND', title:'…', sub:'…'}.
+function setup(tl){TL=tl;
+  for(const c of tl.scenes.filter(x=>x.id.startsWith('chap'))){const d=document.createElement('div');d.className='scene';d.id=c.id;
+    d.innerHTML=`<div class="eyebrow chap-k" style="position:absolute;left:220px;top:300px"><b>■</b> ${c.k} · ${c.en}</div>
+<div class="chap-t" style="position:absolute;left:220px;top:350px;font:900 128px/1.1 var(--zh)">${c.title}</div>
+<div class="chap-r" style="position:absolute;left:220px;top:530px;height:4px;background:repeating-linear-gradient(90deg,var(--red) 0 54px,transparent 54px 62px)"></div>
+<div class="chap-s" style="position:absolute;left:220px;top:570px;font:400 42px/1.5 var(--zh);color:var(--ink2)">${c.sub}</div>`;
+    $('stage').insertBefore(d,document.querySelector('.sub'))}}
+function chap(id,u){const n=$(id);show(n.querySelector('.chap-k'),pr(u,0.1,0.5),0,-30);show(n.querySelector('.chap-t'),pr(u,0.2,0.7),0,-50);
+  n.querySelector('.chap-r').style.width=(900*pr(u,0.5,1.2))+'px';show(n.querySelector('.chap-s'),pr(u,0.9,1.4),20)}
+function render(t){
+  const T=TL.duration;let cur=0;
+  TL.scenes.forEach((s,i)=>{if(t>=s.start)cur=i});
+  $('tc').textContent=(Math.floor(t/60)+'').padStart(2,'0')+':'+(t%60).toFixed(2).padStart(5,'0');
+  $('sc').textContent=String(cur+1).padStart(2,'0')+' / '+String(TL.scenes.length).padStart(2,'0');
+  $('prog').style.width=(100*t/T)+'%';
+  // subtitles
+  const sub=TL.scenes.flatMap(s=>s.subs).find(x=>t>=x.t0&&t<x.t1);
+  const el=$('sub');if(sub){el.textContent=sub.text;el.style.visibility='visible'}else el.style.visibility='hidden';
+  TL.scenes.forEach(s=>{
+    const u=t-s.start,d=s.dur,node=$(s.id);
+    const fade=Math.min(clamp((u+0.25)/0.5),clamp((d+0.25-u)/0.5));
+    node.style.opacity=fade;node.style.visibility=fade>0?'visible':'hidden';
+    if(fade>0)(s.id.startsWith('chap')?chap(s.id,u):SC[s.id]&&SC[s.id](u,d));
+  });
+}
+const SC={
+ s01(u){const lp=pr(u,0.1,0.8);$('s01logo').style.transform=`scale(${0.4+0.6*lp}) rotate(${(1-lp)*-90}deg)`;$('s01logo').style.opacity=lp;
+   const n=Math.round(clamp((u-0.5)/1.1)*NAME.length);$('s01name').innerHTML=NAME.slice(0,n)+(n<NAME.length&&u>0.5?'<span class="red">▌</span>':'');
+   $('s01rule').style.width=(1000*pr(u,1.4,2.2))+'px';
+   const k=Math.round(clamp((u-2.6)/1.4)*TAG.length);const txt=TAG.slice(0,k);$('s01tag').innerHTML=txt.replace('都有据可查','<span class="red">都有据可查</span>');
+   show($('s01meta'),pr(u,3.6,4.4),20)},
+ s05(u){[...$('s05log').children].forEach((r,i)=>{const a=[0.3,1.9,3.6,6.0][i];show(r,pr(u,a,a+0.4),0,-30);
+     const code=r.querySelector('code');const full=code.dataset.full||(code.dataset.full=code.textContent);code.textContent=full.slice(0,Math.round(clamp((u-a)/0.8)*full.length))});
+   show($('s05foot'),pr(u,7.5,8.2),10)},
+ s06(u){show($('s06card'),pr(u,0,0.7),60);[1,2,3,4].forEach(i=>{const a=[0.8,1.6,2.4,3.2][i-1];show($('d'+i),pr(u,a,a+0.4),0,-20);show($('e'+i),pr(u,a+0.1,a+0.5),0,-20)});
+   const b=$('s06btn');const p=u>5?0.5+0.5*Math.sin((u-5)*6):0;b.style.boxShadow=`0 0 ${10+30*p}px #fc3d21${Math.round(80+100*p).toString(16)}`;b.style.transform=`scale(${1+0.04*p})`},
+ s07(u){['m1','m2','m3','m4'].forEach((id,i)=>{const a=[1.2,2.6,4.2,5.4][i];show($(id),pr(u,a,a+0.5),50)})},
+ s08(u){['r1','r2','r3','r4'].forEach((id,i)=>{const a=0.3+i*0.9;show($(id),pr(u,a,a+0.5),30);const on=u>=a&&u<a+1.6;$(id).style.borderColor=on?'var(--cyan)':'var(--line2)';$(id).style.background=on?'#122028':'var(--panel)'});
+   show($('s08q'),pr(u,4.6,5.1),20);$('s08line').style.width=(460*pr(u,5.2,6.0))+'px';show($('s08d'),pr(u,5.8,6.4),0,40);
+   const sim=0.81*pr(u,6.2,7.4);$('s08bar').style.width=(100*sim/1)+'%';$('s08sim').textContent=sim.toFixed(2)},
+ s11(u){const lp=pr(u,0,0.7);$('s11logo').style.transform=`scale(${0.5+0.5*lp})`;show($('s11links'),pr(u,2.0,2.8),20)}
+};
+window.setup=setup;window.render=render;
+window.overlay=o=>{const el=$('sub');if(o.caption){el.textContent=o.caption;el.style.visibility='visible'}else el.style.visibility='hidden';
+  $('prog').style.width=o.progress+'%';$('tc').textContent=o.tc;$('sc').textContent=o.sc;$('fadeov').style.opacity=o.fade;$('tag').style.display=o.tag?'block':'none'};
+</script></body></html>
