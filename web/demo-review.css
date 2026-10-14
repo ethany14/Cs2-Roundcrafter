@@ -272,3 +272,24 @@ body.tb-playback .hud,body.tb-playback #killfeed,body.tb-playback #roundStrip,bo
 body.tb-playback .transport{visibility:visible!important}
 #tbDur{width:56px}
 .tb-item.off-floor,.tb-player.off-floor{opacity:.22;pointer-events:none}
+
+/* movement prediction panel */
+.mv-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mv-head h2{margin:2px 0}
+.mv-badge{font:600 10px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:#111;background:var(--amber);padding:2px 7px}
+.mv-form{display:flex;gap:6px;margin:8px 0}
+.mv-form select{flex:1;min-width:0}
+.mv-sub{font:600 12px var(--mono);color:var(--ink);margin:10px 0 4px}
+.mv-error{border:1px solid var(--red2);border-left:3px solid var(--red);padding:6px 10px;margin:8px 0;background:#fc3d210d}
+.mv-error p{margin:4px 0 0;font-size:12px;color:var(--ink2)}
+.mv-legend{display:flex;gap:12px;flex-wrap:wrap;font:10px var(--mono);color:var(--ink2);margin:6px 0}
+.mv-legend i{display:inline-block;width:14px;height:3px;margin-right:5px;vertical-align:middle}
+.mv-table{width:100%;border-collapse:collapse;margin:8px 0;font:11px var(--mono)}
+.mv-table th,.mv-table td{padding:4px 5px;text-align:right;border-bottom:1px solid var(--line)}
+.mv-table th:first-child,.mv-table td:first-child{text-align:left}
+.mv-table th{color:var(--dim);font-weight:400}
+.mv-table tr:nth-child(2) td{color:var(--amber)}
+/* six review tabs: 3x2 grid so long English labels fit */
+.panel-tabs{flex-wrap:wrap}
+.panel-tabs>button{flex:1 1 33.3%;min-width:0;padding:8px 4px;font-size:10px;line-height:1.25;border-bottom:1px solid var(--line)}
+.panel-tabs>button:nth-child(3n){border-right:0}

@@ -86,7 +86,7 @@ const details=document.createElement('details');details.open=!state.result;const
 
 $('imports').onclick=()=>window.showView&&window.showView('matches');
 
-const PANELS={stats:['statsTab','statsPanel'],roster:['rosterTab','roster'],coach:['analysisTab','coachPane'],match:['matchTab','matchCoach'],compare:['compareTab','comparePanel'],cases:['casesTab','casesPanel']};
+const PANELS={stats:['statsTab','statsPanel'],roster:['rosterTab','roster'],coach:['analysisTab','coachPane'],match:['matchTab','matchCoach'],compare:['compareTab','comparePanel'],cases:['casesTab','casesPanel'],move:['moveTab','movePanel']};
 function showPanel(name){for(const [k,[tab,pane]] of Object.entries(PANELS)){$(pane).hidden=k!==name;$(tab).setAttribute('aria-selected',String(k===name))}if(name==='roster')updateUi(true)}
 window.showPanel=showPanel;
 $('analysisTab').onclick=()=>showPanel('coach');

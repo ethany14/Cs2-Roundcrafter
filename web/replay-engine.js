@@ -116,6 +116,7 @@ class Engine{
       ctx.font=`600 ${9.5*k}px "Space Mono",monospace`;const label=(this.names[p.id]||p.id).slice(0,14);const w=ctx.measureText(label).width;ctx.fillStyle='rgba(8,9,11,.78)';ctx.fillRect(u-w/2-3*k,v-22*k,w+6*k,12*k);ctx.fillStyle=sel?'#fff':col;ctx.fillText(label,u-w/2,v-13*k);
       // weapon in hand, drawn above the name like the in-game spectator HUD (white game icon)
       const im=this.icon(p.weapon);if(im){const h=8*k,iw=h*im.naturalWidth/Math.max(1,im.naturalHeight);ctx.globalAlpha*=.92;ctx.drawImage(im,u-iw/2,v-33*k,iw,h)}ctx.globalAlpha=1}
+    if(this.overlay)try{this.overlay(ctx,this,t,k)}catch(e){console.error(e)}
   }
   pick(sx,sy){const g=this.geom();let best=null,bd=14;for(const p of this.lastState||[]){if(!this.onFloor(p.z))continue;const [u,v]=this.px(p.x,p.y),d=Math.hypot(u*g.s+g.ox-sx,v*g.s+g.oy-sy);if(d<bd){bd=d;best=p}}return best}
 }

@@ -99,7 +99,7 @@
       <div id="players" hidden></div>
     </div>
     <article class="mc-panel review-side">
-      <div class="mc-tabs panel-tabs" role="tablist"><button id="rosterTab" aria-selected="true">计分板</button><button id="analysisTab">Agent 解读</button><button id="matchTab">整场分析</button><button id="compareTab">职业对照</button><button id="statsTab">比赛数据</button><button id="casesTab" hidden>案例库</button></div>
+      <div class="mc-tabs panel-tabs" role="tablist"><button id="rosterTab" aria-selected="true">计分板</button><button id="analysisTab">Agent 解读</button><button id="matchTab">整场分析</button><button id="compareTab">职业对照</button><button id="statsTab">比赛数据</button><button id="moveTab">移动预测</button><button id="casesTab" hidden>案例库</button></div>
       <div class="side-body">
         <div id="roster"></div>
         <div id="coachPane" hidden><div id="coach"></div>
@@ -110,6 +110,7 @@
           <button id="cancelAnalysis" hidden>取消整批分析</button>
           <div id="analysisRounds"></div><div id="analysisClaims"></div></div>
         <div id="comparePanel" hidden><h2>寻找可比职业回合</h2><p id="currentIdentity" class="mc-note"></p><button id="findComparison" class="mc-primary">匹配当前回合</button><p id="comparisonStatus" role="status"></p><div id="comparisonCandidates"></div><details><summary>修改当前 demo 类型</summary><select id="identityKind"><option value="unknown">未分类</option><option value="player">普通玩家</option><option value="professional">职业比赛</option></select><input id="identitySource" type="url" placeholder="职业比赛来源链接"><button id="saveIdentity">保存类型</button><p class="mc-note">职业标记来自上传者声明或已有来源档案，不根据比赛水平自动判断。</p></details></div>
+        <div id="movePanel" hidden></div>
         <div id="statsPanel" hidden><h2>整场数据</h2><div id="matchStats"></div></div>
         <div id="casesPanel" hidden><h2>战术案例库</h2><p>检索历史模型推断，回到原始比赛核对。</p><input id="caseQuery" aria-label="搜索战术案例" placeholder="例如：Secret 转 B、斜坡回防"><div class="toolbar"><select id="caseMap" aria-label="案例地图"><option value="">全部地图</option><option value="de_nuke">Nuke</option><option value="de_dust2">Dust2</option></select><select id="caseSide" aria-label="案例阵营"><option value="">双方</option><option value="T">进攻</option><option value="CT">防守</option></select><button id="caseSearch">检索案例</button></div><p id="caseStatus" role="status"></p><div id="caseResults"></div><div id="caseLearning"></div></div>
       </div>
@@ -240,6 +241,6 @@
   <div id="comparisonFacts"></div>
   <section class="comparison-analysis"><h2>解释差异与改法</h2><p id="comparisonSend"></p><label class="check"><input id="comparisonConsent" type="checkbox">允许发送上述匿名证据进行本次对照</label><button id="analyzeComparison" class="mc-primary">让 Agent 分析对照（最多 2 次）</button><button id="cancelComparison" hidden>取消</button><p id="comparisonAgentStatus"></p><div id="comparisonFindings"></div></section>
 </section>
-<script src="/cs-icons.js"></script><script src="/replay-engine.js"></script><script src="/demo-review.js"></script><script src="/demo-compare.js"></script><script src="/demo-workbench.js"></script><script src="/tactic-board.js"></script><script src="/player-hub.js"></script>
+<script src="/cs-icons.js"></script><script src="/replay-engine.js"></script><script src="/demo-review.js"></script><script src="/demo-compare.js"></script><script src="/demo-workbench.js"></script><script src="/tactic-board.js"></script><script src="/player-hub.js"></script><script src="/movement.js"></script>
 </body>
 </html>
