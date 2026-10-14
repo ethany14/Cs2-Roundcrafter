@@ -35,8 +35,13 @@ PROVIDERS=[
 BY_ID={p['id']:p for p in PROVIDERS}
 MAX_CHARS=4000        # per text sent to the provider
 MAX_NEW_PER_CALL=2000 # texts embedded by one retrieval or rebuild
-ALPHA=0.65            # weight of cosine similarity in the hybrid score
-MIN_SIMILARITY=0.40   # below this a vector-only hit is not treated as relevant
+ALPHA=0.65            # default weight of cosine similarity in the hybrid score (user-adjustable)
+MIN_SIMILARITY=0.40   # floor used until a model is calibrated (user can override)
+# Calibration: each model has its own baseline for unrelated texts, so the floor for a vector-only hit is set
+# from the model's own scores: the 95th percentile of similarity between random pairs of library texts.
+CALIBRATION_PERCENTILE=95
+CALIBRATION_MIN_VECTORS=20
+FLOOR_RANGE=(0.15,0.90)
 LOCK=threading.RLock()
 TRANSPORT=None   # tests swap in a mock httpx transport
 
@@ -72,7 +77,16 @@ def validate(raw,previous=None,root=None):
     if not key and previous and previous.get('provider')==p['id']:key=previous.get('api_key','')
     if key and (len(key)>400 or re.search(r'\s',key)):raise ValueError('API Key 格式不正确')
     if not key and not (p.get('key_optional') or is_local(url) or _chat_key(root,p['id'])):raise ValueError('请填写 API Key')
-    return {'provider':p['id'],'base_url':url,'model':model,'api_key':key,'dimensions':dims}
+    def fraction(name,low,high,message):
+        v=raw.get(name)
+        if v in ('',None):return None
+        try:v=float(v)
+        except (TypeError,ValueError):raise ValueError(message) from None
+        if not low<=v<=high:raise ValueError(message)
+        return round(v,3)
+    return {'provider':p['id'],'base_url':url,'model':model,'api_key':key,'dimensions':dims,
+            'alpha':fraction('alpha',0,1,'语义权重须在 0 到 1 之间'),
+            'min_similarity':fraction('min_similarity',0,1,'相似度下限须在 0 到 1 之间')}
 
 def config(root=None,saved=None):
     """Runtime config, or None when embeddings are not set up."""
@@ -97,8 +111,9 @@ def public(root):
     return {'providers':PROVIDERS,
             'saved':None if not s else {'provider':s['provider'],'base_url':s['base_url'],'model':s['model'],'dimensions':s.get('dimensions'),
                 'has_key':bool(s.get('api_key')),'key_hint':('…'+s['api_key'][-4:]) if len(s.get('api_key',''))>=8 else '',
-                'reuses_chat_key':not s.get('api_key') and bool(c and c['api_key'])},
-            'configured':bool(c),'index':index_status(root,c)}
+                'reuses_chat_key':not s.get('api_key') and bool(c and c['api_key']),
+                'alpha':s.get('alpha'),'min_similarity':s.get('min_similarity')},
+            'configured':bool(c),'index':index_status(root,c),'tuning':tuning(root,c)}
 
 # ---------------------------------------------------------------- provider calls
 def embed_texts(texts,cfg,kind='document',*,transport=None):
@@ -131,6 +146,7 @@ def _db(root):
     db=sqlite3.connect(p)
     db.execute('CREATE TABLE IF NOT EXISTS vectors(model_key TEXT,text_hash TEXT,dim INTEGER,vector BLOB,PRIMARY KEY(model_key,text_hash))')
     db.execute('CREATE TABLE IF NOT EXISTS libraries(library TEXT,model_key TEXT,items INTEGER,updated REAL,PRIMARY KEY(library,model_key))')
+    db.execute('CREATE TABLE IF NOT EXISTS calibration(model_key TEXT PRIMARY KEY,floor REAL,pairs INTEGER,vectors INTEGER,updated REAL)')
     return db
 
 def vectors(texts,cfg,root=None,kind='document',*,transport=None,library=None):
@@ -166,10 +182,15 @@ def semantic(library,texts,query,root=None,*,transport=None):
     except (RuntimeError,OSError,sqlite3.Error) as e:
         return None,{'vector':'unavailable','reason':str(e)[:160],'model':cfg['model']}
     if docs.shape[1]!=q.shape[0]:return None,{'vector':'unavailable','reason':'dimension mismatch','model':cfg['model']}
-    return docs@q,{'vector':'on','model':cfg['model'],'provider':cfg['provider']}
+    t=tuning(root,cfg)
+    if t['floor_source']=='default' and calibrate(root,cfg) is not None:t=tuning(root,cfg)
+    return docs@q,{'vector':'on','model':cfg['model'],'provider':cfg['provider'],'alpha':t['alpha'],'floor':t['floor'],'floor_source':t['floor_source']}
 
-def hybrid(keyword,sims,alpha=ALPHA):
-    """Blend keyword scores (any scale) with cosine similarities; keyword only when sims is None."""
+def hybrid(keyword,sims,alpha=None):
+    """Blend keyword scores (any scale) with cosine similarities; keyword only when sims is None.
+    alpha is the weight of meaning (0-1), or the info dict from semantic() carrying the user's setting."""
+    if isinstance(alpha,dict):alpha=alpha.get('alpha')
+    alpha=ALPHA if alpha is None else alpha
     kw=np.asarray(keyword,dtype=np.float32)
     top=float(kw.max()) if kw.size and kw.max()>0 else 0.
     kwn=kw/top if top else kw*0
@@ -226,4 +247,36 @@ def rebuild(root=None,*,transport=None):
         try:vectors(texts,cfg,root,'document',transport=transport,library=name)
         except RuntimeError as e:raise ValueError(str(e)) from None
         done.append({'library':name,'items':len(texts)})
-    return {'rebuilt':done,'index':index_status(root,cfg)}
+    calibrate(root,cfg)
+    return {'rebuilt':done,'index':index_status(root,cfg),'tuning':tuning(root,cfg)}
+
+
+# ---------------------------------------------------------------- tuning
+def calibrate(root=None,cfg=None,*,seed=0):
+    """Set this model's floor from its own scores on unrelated texts (random pairs of library vectors)."""
+    root=_root(root);cfg=cfg or config(root)
+    if not cfg:return None
+    with LOCK,_db(root) as db:
+        rows=db.execute('SELECT dim,vector FROM vectors WHERE model_key=?',(cfg['model_key'],)).fetchall()
+        if len(rows)<CALIBRATION_MIN_VECTORS:return None
+        m=np.stack([np.frombuffer(b,dtype=np.float32,count=d) for d,b in rows])
+        rng=np.random.default_rng(seed);n=len(m);pairs=min(4000,n*(n-1)//2)
+        i=rng.integers(0,n,pairs);j=rng.integers(0,n,pairs);keep=i!=j
+        sims=np.einsum('ij,ij->i',m[i[keep]],m[j[keep]])
+        floor=float(np.clip(np.percentile(sims,CALIBRATION_PERCENTILE),*FLOOR_RANGE))
+        db.execute('INSERT OR REPLACE INTO calibration VALUES(?,?,?,?,?)',(cfg['model_key'],round(floor,4),int(keep.sum()),n,time.time()))
+    return floor
+
+def tuning(root=None,cfg=None):
+    """Effective blend and floor: the user's setting, else the model's calibration, else the defaults."""
+    root=_root(root);cfg=cfg if cfg is not None else config(root)
+    calibrated=None
+    if cfg and index_path(root).exists():
+        with _db(root) as db:
+            row=db.execute('SELECT floor,pairs,vectors FROM calibration WHERE model_key=?',(cfg['model_key'],)).fetchone()
+        if row:calibrated={'floor':row[0],'pairs':row[1],'vectors':row[2]}
+    if cfg and cfg.get('min_similarity') is not None:floor,source=cfg['min_similarity'],'manual'
+    elif calibrated:floor,source=calibrated['floor'],'calibrated'
+    else:floor,source=MIN_SIMILARITY,'default'
+    alpha=cfg.get('alpha') if cfg and cfg.get('alpha') is not None else ALPHA
+    return {'alpha':alpha,'floor':floor,'floor_source':source,'calibrated':calibrated,'defaults':{'alpha':ALPHA,'floor':MIN_SIMILARITY}}

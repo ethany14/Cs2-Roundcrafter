@@ -8,7 +8,7 @@ def card_text(card):return card['title']+' '+card['summary']+' '+' '.join(card['
 
 
 def search_resources(db,case_id,query=''):
-    from .embeddings import semantic,hybrid,method,MIN_SIMILARITY
+    from .embeddings import semantic,hybrid,method
     case=get_case(db,case_id)
     terms=query.casefold().split()
     pool=[]
@@ -17,8 +17,8 @@ def search_resources(db,case_id,query=''):
         pool.append((sum(t in card_text(card).casefold() for t in terms),card))
     sims,info=semantic('learning_resources',[card_text(c) for _,c in pool],query)
     ranked=[]
-    for i,(combined,(score,card)) in enumerate(zip(hybrid([s for s,_ in pool],sims),pool)):
-        if terms and not score and (sims is None or sims[i]<MIN_SIMILARITY):continue
+    for i,(combined,(score,card)) in enumerate(zip(hybrid([s for s,_ in pool],sims,info),pool)):
+        if terms and not score and (sims is None or sims[i]<info['floor']):continue
         ranked.append((combined,card))
     ranked.sort(key=lambda pair:(-pair[0],pair[1]['id']))
     return {'case_id':case_id,'resources':[c for _,c in ranked[:5]],'retrieval_method':method(info,'map/side filters + keyword match'),

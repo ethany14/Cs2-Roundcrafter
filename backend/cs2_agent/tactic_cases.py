@@ -44,7 +44,7 @@ def case_text(c):return c['title']+'\n'+c['interpretation']+'\n'+' '.join(e['tex
 
 def search(query='',map_name='',side='',limit=30):
     if len(query)>200 or map_name not in ('','de_nuke','de_dust2') or side not in ('','T','CT','both'):raise ValueError('无效检索条件')
-    from .embeddings import semantic,hybrid,method,MIN_SIMILARITY
+    from .embeddings import semantic,hybrid,method
     wanted=terms(query);pool=[]
     for c in catalog()['cases']:
         if map_name and c['map']!=map_name:continue
@@ -53,9 +53,9 @@ def search(query='',map_name='',side='',limit=30):
         pool.append((3*len(wanted&title)+len(wanted&body),c))
     sims,info=semantic('case_library',[case_text(c) for _,c in pool],query)
     ranked=[]
-    for i,(combined,(score,c)) in enumerate(zip(hybrid([s for s,_ in pool],sims),pool)):
+    for i,(combined,(score,c)) in enumerate(zip(hybrid([s for s,_ in pool],sims,info),pool)):
         sim=None if sims is None else float(sims[i])
-        if wanted and not score and (sim is None or sim<MIN_SIMILARITY):continue
+        if wanted and not score and (sim is None or sim<info['floor']):continue
         ranked.append((combined,c,sim))
     ranked.sort(key=lambda row:(-row[0],row[1]['map'],row[1]['round'],row[1]['id']))
     return {'total':len(ranked),'method':method(info,'local_alias_and_lexical_overlap'),'cases':[{k:v for k,v in c.items() if k!='evidence'}|{'evidence_count':len(c['evidence']),'retrieval_score':score}|({'similarity':round(sim,4)} if sim is not None else {}) for score,c,sim in ranked[:max(1,min(limit,50))]]}

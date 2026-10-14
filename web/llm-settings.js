@@ -57,6 +57,9 @@ const CSS=`
 .llm-tabs button{font:700 11px var(--mono,monospace);letter-spacing:.1em;text-transform:uppercase;background:transparent;border:0;border-bottom:2px solid transparent;
   color:var(--dim,#958f82);padding:10px 12px;cursor:pointer;margin-bottom:-1px}
 .llm-tabs button[aria-selected=true]{color:var(--ink,#ece6d6);border-bottom-color:var(--red,#fc3d21)}
+.llm-dialog input[type=range]{padding:0;border:0;background:transparent;accent-color:var(--red,#fc3d21);width:100%}
+.llm-reset{margin-top:8px}
+.llm-out{display:block;font:12px var(--mono,monospace);color:var(--amber,#ffb23f);margin-top:4px}
 .llm-index{border:1px solid var(--line2,#343a43);background:var(--bg2,#0d0f12);font:12px var(--mono,monospace)}
 .llm-index div{display:flex;justify-content:space-between;gap:12px;padding:6px 10px;border-bottom:1px solid var(--line,#23272e)}
 .llm-index div:last-child{border-bottom:0}
@@ -158,6 +161,20 @@ function embedPanel(es){
   const keyLink=el('a',{target:'_blank',rel:'noopener'},T('获取 API Key ↗'));
   const urlNote=el('div',{class:'llm-hint'}),keyHint=el('div',{class:'llm-hint'});
   const index=el('div',{class:'llm-index'});
+  // Tuning: blank / untouched means "use the default or the model's calibration".
+  const tune=es.tuning||{alpha:.65,floor:.4,floor_source:'default',defaults:{alpha:.65,floor:.4}};
+  let alphaTouched=saved?.alpha!=null;
+  const alpha=el('input',{id:'embAlpha',type:'range',min:'0',max:'100',step:'5',value:String(Math.round((saved?.alpha??tune.defaults.alpha)*100))});
+  const alphaOut=el('output',{for:'embAlpha',class:'llm-out'});
+  const paintAlpha=()=>{const v=Number(alpha.value);alphaOut.textContent=T('语义 {0}% · 关键词 {1}%',[v,100-v])+(alphaTouched?'':' · '+T('默认'))};
+  alpha.oninput=()=>{alphaTouched=true;paintAlpha()};paintAlpha();
+  const floor=el('input',{id:'embFloor',type:'number',min:'0',max:'1',step:'0.01',value:saved?.min_similarity??''});
+  const floorHint=el('div',{class:'llm-hint'});
+  const paintFloor=t=>{floor.placeholder=t.calibrated?T('自动 · 已校准 {0}',[t.calibrated.floor.toFixed(2)]):T('自动 · 校准前用 {0}',[t.defaults.floor.toFixed(2)]);
+    floorHint.textContent=t.calibrated?T('按该模型对 {0} 对无关文本的打分校准（取 95 分位）。留空即自动。',[t.calibrated.pairs]):T('重建索引后会按该模型自动校准。留空即自动。')};
+  paintFloor(tune);
+  const reset=el('button',{type:'button',class:'llm-act'},T('恢复默认'));
+  reset.onclick=()=>{alphaTouched=false;alpha.value=String(Math.round(tune.defaults.alpha*100));floor.value='';paintAlpha()};
   const paintIndex=ix=>{index.replaceChildren(
     ...(ix.libraries.length?ix.libraries.map(l=>el('div',{},el('span',{},T(LIBRARIES[l.library]||l.library)),el('b',{},String(l.items)))):[el('div',{},el('span',{},T('索引为空：首次检索时会自动建立，也可以点“重建索引”')))]),
     el('div',{class:'llm-index-total'},el('span',{},T('已缓存向量')),el('b',{},String(ix.vectors))))};
@@ -175,16 +192,17 @@ function embedPanel(es){
     urlNote.textContent=p.id==='custom'?T('任何兼容 OpenAI /embeddings 的服务都可以'):(p.note?T(p.note):'');
     keyHint.replaceChildren(keyLink);
   }
-  const form=()=>({provider:current.id,base_url:url.value.trim(),model:model.value.trim(),api_key:key.value.trim(),dimensions:dims.disabled?'':dims.value});
+  const form=()=>({provider:current.id,base_url:url.value.trim(),model:model.value.trim(),api_key:key.value.trim(),dimensions:dims.disabled?'':dims.value,
+    alpha:alphaTouched?Number(alpha.value)/100:'',min_similarity:floor.value.trim()});
   const test=el('button',{type:'button',class:'llm-act'},T('测试连接'));
   test.onclick=busy(status,async()=>{status.set(T('正在测试…'));const r=await api('/api/embedding/test',form());
     status.set(T('连接成功 · {0} · {1} 维 · {2} ms · 中英同义句相似度 {3}',[r.model,r.dimensions,r.latency_ms,r.cross_language_similarity]),'ok')});
   const rebuild=el('button',{type:'button',class:'llm-act'},T('重建索引'));rebuild.hidden=!es.configured;
   rebuild.onclick=busy(status,async()=>{status.set(T('正在为资料库生成向量…'));const r=await api('/api/embedding/rebuild',{});
-    paintIndex(r.index);status.set(T('索引已更新：{0} 个资料库',[r.rebuilt.length]),'ok')});
+    paintIndex(r.index);if(r.tuning)paintFloor(r.tuning);status.set(T('索引已更新：{0} 个资料库',[r.rebuilt.length]),'ok')});
   const save=el('button',{type:'button',class:'llm-act llm-primary'},T('保存'));
   const clear=el('button',{type:'button',class:'llm-act'},T('清除已保存设置'));clear.hidden=!saved;
-  save.onclick=busy(status,async()=>{const r=await api('/api/embedding/settings',form());paintIndex(r.index);rebuild.hidden=false;clear.hidden=false;
+  save.onclick=busy(status,async()=>{const r=await api('/api/embedding/settings',form());paintIndex(r.index);if(r.tuning)paintFloor(r.tuning);rebuild.hidden=false;clear.hidden=false;
     status.set(T('已保存。检索现在使用向量与关键词混合排序。'),'ok')});
   clear.onclick=busy(status,async()=>{const r=await api('/api/embedding/clear',{});paintIndex(r.index);rebuild.hidden=true;clear.hidden=true;
     status.set(T('已清除：检索回到关键词排序。'),'ok')});
@@ -197,6 +215,9 @@ function embedPanel(es){
         el('div',{},el('label',{class:'llm-label',for:'embDims'},T('向量维度')),dims,el('div',{class:'llm-hint'},T('仅 OpenAI 支持自定义维度')))),
       el('div',{},el('label',{class:'llm-label',for:'embKey'},'API Key'),row,keyHint),
       el('div',{},el('label',{class:'llm-label',for:'embBaseUrl'},T('接口地址')),url,urlNote),
+      el('div',{class:'llm-two'},
+        el('div',{},el('label',{class:'llm-label',for:'embAlpha'},T('混合权重')),alpha,alphaOut,el('div',{class:'llm-hint'},T('越靠右越看重语义，越靠左越看重字面关键词。'))),
+        el('div',{},el('label',{class:'llm-label',for:'embFloor'},T('相似度下限')),floor,floorHint,el('div',{class:'llm-reset'},reset))),
       el('div',{},el('span',{class:'llm-label'},T('向量索引')),index),
       status,
       el('div',{class:'llm-privacy'},T('检索时，资料库文本和查询会发送给向量服务商；职业回合与职业案例库的情境向量在本机计算，不会发送。向量缓存在'),' ',el('code',{},'data/vectors/'),T('。'))),

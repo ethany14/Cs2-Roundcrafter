@@ -204,3 +204,26 @@ def test_tactic_cards_hybrid_ranking(home, tmp_path, monkeypatch):
     result = tactics_rag.retrieve(query)
     assert result["retrieval_method"].startswith("hybrid: vector embeddings")
     assert [c["id"] for c in result["results"]] == ["k2", "k1"] and result["results"][0]["similarity"] > result["results"][1]["similarity"]
+
+
+def test_blend_and_floor_are_adjustable_and_floor_calibrates_per_model(home, monkeypatch):
+    root, _ = home
+    configure(root)
+    assert emb.tuning(root)["floor_source"] == "default"
+    # Calibrate on 30 cached vectors: the floor comes from this model's own scores on random pairs.
+    rng = np.random.default_rng(1)
+    texts = [" ".join(rng.choice(sum(CONCEPTS.values(), []), 3)) + f" #{i}" for i in range(30)]
+    emb.vectors(texts, emb.config(root))
+    floor = emb.calibrate(root)
+    t = emb.tuning(root)
+    assert t["floor_source"] == "calibrated" and t["floor"] == round(floor, 4) and 0.15 <= floor <= 0.9
+    # Manual settings override both.
+    state = configure(root, alpha=0.3, min_similarity=0.55)
+    assert state["tuning"]["alpha"] == 0.3 and state["tuning"]["floor"] == 0.55 and state["tuning"]["floor_source"] == "manual"
+    sims, info = emb.semantic("lib", ["smoke mid"], "smoke")
+    assert info["alpha"] == 0.3 and info["floor"] == 0.55
+    assert emb.hybrid([1, 0], [0, 1], info) == pytest.approx([0.7, 0.3])
+    with pytest.raises(ValueError):
+        configure(root, alpha=1.5)
+    # Clearing the fields goes back to auto.
+    assert configure(root, alpha="", min_similarity="")["tuning"]["floor_source"] == "calibrated"

@@ -72,6 +72,7 @@ Retrieval is **hybrid vector search**:
 - **Text libraries** are embedded by the provider you choose under **Model → Embeddings** (OpenAI, Voyage AI, Gemini, Qwen, Zhipu, Mistral, Ollama or any OpenAI-compatible endpoint). Each query is embedded too, and results are ranked by cosine similarity blended with the keyword score. A Chinese query finds English sources and the other way round.
 - **Pro rounds and the pro casebook** become numeric **situation vectors** (positions, timing, economy, routes, players alive), computed on your machine, and are searched by nearest neighbour.
 - **Hard filters run first** (map, side, site, phase, bomb state, grenade type), so similarity never overrides the game state.
+- **Tunable per model.** The Embeddings tab has a meaning-vs-keywords **blend** (default 65 / 35) and a **similarity floor** for results found by meaning alone. The floor calibrates itself to each model: the 95th percentile of the model's scores on random pairs of library texts, because every model has its own baseline for unrelated text. Either can be set by hand.
 - **Vectors are cached** in `data/vectors/index.sqlite` by model and text hash, so each text is embedded once per model. Without an embedding model, or if the provider fails, retrieval falls back to keyword ranking and says so in its result.
 
 | Library | What it holds | How it is matched | Used by |
@@ -268,6 +269,7 @@ Agent 不凭记忆回答。解读之前，RoundCrafter 会先从自己的资料�
 - **文本资料库**由你在**模型 → 向量嵌入**中选择的服务商生成向量（OpenAI、Voyage AI、Gemini、通义千问、智谱、Mistral、Ollama，或任何兼容 OpenAI 的接口）。查询也会转成向量，按余弦相似度与关键词得分混合排序。中文查询可以找到英文资料，反之亦然。
 - **职业回合与职业案例库**转成数值**情境向量**（站位、时间、经济、路线、存活人数），在本机计算，按最近邻检索。
 - **先执行硬过滤**（地图、阵营、包点、阶段、下包状态、道具类型），相似度永远不会越过对局状态。
+- **可按模型调节。** 向量嵌入页可以调整语义与关键词的**混合权重**（默认 65 / 35），以及只靠语义命中时的**相似度下限**。下限会按每个模型自动校准：取该模型对资料库中随机文本对打分的 95 分位，因为每个模型对无关文本的基线分都不同。两项都可以手动设置。
 - **向量本地缓存**在 `data/vectors/index.sqlite`，按模型和文本哈希存储，同一模型下每段文本只生成一次。未配置向量模型或服务商出错时，检索退回关键词排序，并在结果中注明。
 
 | 资料库 | 内容 | 匹配方式 | 用在哪里 |

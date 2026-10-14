@@ -163,7 +163,7 @@ def card_text(c):return ' '.join([c['title'],c['kind'] or '',*c['origin'],*c['ta
 
 def retrieve_cards(query,map_name='de_nuke',cards=None):
     """Hard filters (map, grenade type, named destination), then keyword overlap blended with embedding similarity."""
-    from .embeddings import semantic,hybrid,MIN_SIMILARITY
+    from .embeddings import semantic,hybrid
     terms=words(query)
     requested_kind=next((k for k in ['smoke','flash','fire','he'] if k in terms),None)
     pool=[]
@@ -175,10 +175,10 @@ def retrieve_cards(query,map_name='de_nuke',cards=None):
         destinations=terms & {'heaven','outside','cross','hut','backsite','vent','ramp','secret','garage'}
         if destinations and not destinations & tokens:continue
         pool.append((len(terms & tokens),c))
-    sims,_=semantic('lineup_cards',[card_text(c) for _,c in pool],query)
+    sims,info=semantic('lineup_cards',[card_text(c) for _,c in pool],query)
     ranked=[]
-    for i,(combined,(score,c)) in enumerate(zip(hybrid([s for s,_ in pool],sims),pool)):
-        if score or (sims is not None and sims[i]>=MIN_SIMILARITY):ranked.append((combined,c))
+    for i,(combined,(score,c)) in enumerate(zip(hybrid([s for s,_ in pool],sims,info),pool)):
+        if score or (sims is not None and sims[i]>=info['floor']):ranked.append((combined,c))
     return [c for _,c in sorted(ranked,key=lambda r:(-r[0],r[1]['id']))][:6]
 
 def check_fit(need,card,player=None):

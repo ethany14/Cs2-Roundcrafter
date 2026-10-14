@@ -157,13 +157,13 @@ def knowledge_search(db, query, map_name='de_dust2'):
     expression=' OR '.join('"'+t.replace('"','""')+'"' for t in tokens)
     lexical=[dict(r) for r in db.execute('''SELECT k.* FROM knowledge_fts f JOIN knowledge k ON k.id=f.id
        WHERE knowledge_fts MATCH ? AND k.map=? AND k.reviewed=1 ORDER BY rank LIMIT 50''',(expression,map_name))]
-    from .embeddings import semantic,hybrid,MIN_SIMILARITY
+    from .embeddings import semantic,hybrid
     rows=[dict(r) for r in db.execute('SELECT * FROM knowledge WHERE map=? AND reviewed=1 ORDER BY id',(map_name,))]
-    sims,_=semantic('reviewed_notes',[r['title']+'\n'+r['body'] for r in rows],query)
+    sims,info=semantic('reviewed_notes',[r['title']+'\n'+r['body'] for r in rows],query)
     if sims is None:return lexical[:5]
     rank={r['id']:i for i,r in enumerate(lexical)}
     keyword=[1/(1+rank[r['id']]) if r['id'] in rank else 0 for r in rows]
-    scored=[(score,r,float(s)) for score,r,s in zip(hybrid(keyword,sims),rows,sims) if r['id'] in rank or s>=MIN_SIMILARITY]
+    scored=[(score,r,float(s)) for score,r,s in zip(hybrid(keyword,sims,info),rows,sims) if r['id'] in rank or s>=info['floor']]
     scored.sort(key=lambda x:(-x[0],x[1]['id']))
     return [{**r,'similarity':round(s,4)} for _,r,s in scored[:5]]
 

@@ -56,7 +56,7 @@ def retrieve(raw,limit=6):
   ranked.append({**c,'fit':fit,'keyword_score':score,'query_matches':sorted(set(terms)&set(doc))})
  from .embeddings import semantic,hybrid,method
  sims,info=semantic('tactic_cards',[card_text(c) for c in ranked],s['query'])
- for c,combined,i in zip(ranked,hybrid([c['keyword_score'] for c in ranked],sims),range(len(ranked))):
+ for c,combined,i in zip(ranked,hybrid([c['keyword_score'] for c in ranked],sims,info),range(len(ranked))):
   c['retrieval_score']=combined
   if sims is not None:c['similarity']=round(float(sims[i]),4)
  ranked.sort(key=lambda c:(-c['retrieval_score'],c['id']))
