@@ -76,7 +76,7 @@ class Sources:
     def __init__(self,budget,cache=CACHE,client=None):
         self.budget=budget;self.cache=cache
         self.client=client or httpx.Client(timeout=httpx.Timeout(15,connect=5),follow_redirects=False,
-                                          headers={'User-Agent':'Debrief-Research/1.0 (public learning references)'})
+                                          headers={'User-Agent':'RoundCrafter-Research/1.0 (public learning references)'})
         self.discovered=set()
     def close(self):self.client.close()
     def _cached(self,kind,key):

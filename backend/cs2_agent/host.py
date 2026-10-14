@@ -57,7 +57,7 @@ class WorkspaceHost:
         if self.state["calls"] >= self.state["max_calls"]:
             raise LoopStop("call_budget")
         return Turn(
-            "You are the Debrief agent foundation. Use advertised tools to inspect facts before answering. "
+            "You are the RoundCrafter agent foundation. Use advertised tools to inspect facts before answering. "
             "Use experiment tools to verify any training or evaluation claims. A small spectator-state predictor "
             "does not establish tactical understanding or correct player decisions. The language model itself was not fine-tuned. "
             "Do not claim unavailable actions were performed. "

@@ -46,6 +46,7 @@ label{color:var(--dim);font-size:11px}
 .mc-brand{display:flex;align-items:center;gap:10px;padding:0 18px;border-right:1px solid var(--line2);font-family:var(--head);font-size:19px;letter-spacing:.12em;color:var(--ink);font-weight:700;white-space:nowrap}
 .mc-brand b{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--red);color:#fff;font:700 10px var(--mono);letter-spacing:0}
 .mc-brand span{font:400 10px var(--mono);letter-spacing:.2em;color:var(--dim)}
+@media(max-width:1560px){.mc-brand span{display:none}}
 .mc-nav{display:flex;align-items:stretch}
 .mc-nav>*{display:flex;align-items:center;gap:8px;padding:0 18px;border:0;border-right:1px solid var(--line);border-radius:0;background:transparent;color:var(--dim);font:600 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
 .mc-nav>* i{font-style:normal;color:var(--mute);font-weight:400}

@@ -20,7 +20,7 @@ class DOM(HTMLParser):
  def handle_data(self,data):self.stack[-1].children.append(data)
 def fetch(url,path):
  if not path.exists():
-  with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'Debrief-source-index/0.1'}),timeout=30) as r:path.write_bytes(r.read(2_000_000))
+  with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'RoundCrafter-source-index/0.1'}),timeout=30) as r:path.write_bytes(r.read(2_000_000))
  return path.read_text(encoding='utf-8')
 def main():
  (OUT/'raw').mkdir(parents=True,exist_ok=True);html=fetch(BASE+'/tactics-directory',OUT/'raw/directory.html');root=DOM(html).root;items=root.find(lambda n:n.attrs.get('role')=='listitem');cards=[]
