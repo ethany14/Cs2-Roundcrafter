@@ -1,0 +1,9 @@
+{
+  "name": "roundcraft-local",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Local CS2 evidence review prototype",
+  "scripts": {"start": "node server.cjs", "test": "node --test tests/*.test.cjs"},
+  "engines": {"node": ">=22.19.0"},
+  "dependencies": {"@laihoe/demoparser2": "0.42.0"}
+}

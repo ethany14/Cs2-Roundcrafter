@@ -18,6 +18,9 @@ work/
 outputs/**
 !outputs/**/
 !outputs/**/*.md
+# demo parser dependency manifest (npm install restores node_modules)
+!outputs/cs2-coach-prototype/package.json
+!outputs/cs2-coach-prototype/package-lock.json
 *.dem
 *.pt
 *.npy
