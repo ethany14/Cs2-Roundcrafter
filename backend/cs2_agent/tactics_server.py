@@ -159,13 +159,16 @@ class Handler(BaseHTTPRequestHandler):
    from .lineup_catalog import load_catalog
    from .lineup_research import Research
    return self.send(200,{'cards':[Research.compact(c) for c in load_catalog()['cards']]})
+  if route=='/api/llm/settings':
+   from . import llm_settings
+   return self.send(200,llm_settings.public(ROOT))
   if route=='/api/status':
    from .provider import load_config
-   try:config=load_config();model={'configured':True,'host':urlsplit(config['endpoint']).hostname}
+   try:config=load_config();model={'configured':True,'host':urlsplit(config['endpoint']).hostname,'model':config['LLM_MODEL_ID'],'provider':config.get('provider'),'source':config.get('source')}
    except (ValueError,OSError):model={'configured':False,'host':None}
    from .reach_sources import readiness
    return self.send(200,{'token':TOKEN,'model':model,'indexed':20,'verified_executable':0,'research_services':readiness()})
-  static={'/demos':('demo-review.html','text/html'),'/demo-review.js':('demo-review.js','text/javascript'),'/demo-review.css':('demo-review.css','text/css'),'/lab':('free-lab.html','text/html'),'/free-lab.js':('free-lab.js','text/javascript'),'/free-lab.css':('free-lab.css','text/css'),'/assistant':('assistant.html','text/html'),'/assistant.js':('assistant.js','text/javascript'),'/assistant.css':('assistant.css','text/css'),'/':('demo-review.html','text/html'),'/demo-compare.js':('demo-compare.js','text/javascript'),'/demo-workbench.js':('demo-workbench.js','text/javascript'),'/mission.css':('mission.css','text/css'),'/replay-engine.js':('replay-engine.js','text/javascript'),'/cs-icons.js':('cs-icons.js','text/javascript'),'/tactic-board.js':('tactic-board.js','text/javascript'),'/player-hub.js':('player-hub.js','text/javascript'),'/movement.js':('movement.js','text/javascript'),'/i18n.js':('i18n.js','text/javascript'),'/i18n-en.js':('i18n-en.js','text/javascript'),'/demo-workbench.css':('demo-workbench.css','text/css'),'/tactics.css':('tactics.css','text/css'),'/nuke':('nuke-teaching.html','text/html'),'/nuke-teaching.js':('nuke-teaching.js','text/javascript'),'/solver':('free-lab.html','text/html'),'/lineups':('lineup-review.html','text/html'),'/lineup-review.js':('lineup-review.js','text/javascript')}
+  static={'/demos':('demo-review.html','text/html'),'/demo-review.js':('demo-review.js','text/javascript'),'/demo-review.css':('demo-review.css','text/css'),'/lab':('free-lab.html','text/html'),'/free-lab.js':('free-lab.js','text/javascript'),'/free-lab.css':('free-lab.css','text/css'),'/llm-settings.js':('llm-settings.js','text/javascript'),'/assistant':('assistant.html','text/html'),'/assistant.js':('assistant.js','text/javascript'),'/assistant.css':('assistant.css','text/css'),'/':('demo-review.html','text/html'),'/demo-compare.js':('demo-compare.js','text/javascript'),'/demo-workbench.js':('demo-workbench.js','text/javascript'),'/mission.css':('mission.css','text/css'),'/replay-engine.js':('replay-engine.js','text/javascript'),'/cs-icons.js':('cs-icons.js','text/javascript'),'/tactic-board.js':('tactic-board.js','text/javascript'),'/player-hub.js':('player-hub.js','text/javascript'),'/movement.js':('movement.js','text/javascript'),'/i18n.js':('i18n.js','text/javascript'),'/i18n-en.js':('i18n-en.js','text/javascript'),'/demo-workbench.css':('demo-workbench.css','text/css'),'/tactics.css':('tactics.css','text/css'),'/nuke':('nuke-teaching.html','text/html'),'/nuke-teaching.js':('nuke-teaching.js','text/javascript'),'/solver':('free-lab.html','text/html'),'/lineups':('lineup-review.html','text/html'),'/lineup-review.js':('lineup-review.js','text/javascript')}
   if route in static:
    name,kind=static[route];return self.send(200,(ROOT/'web'/name).read_bytes(),kind+'; charset=utf-8')
   return self.send(404,{'error':'Not found'})
@@ -193,6 +196,19 @@ class Handler(BaseHTTPRequestHandler):
     if route=='/api/room/import_legacy':return self.send(200,room.import_legacy(raw.get('match'),raw.get('board')))
     return self.send(404,{'error':'Not found'})
    except RuntimeError as e:return self.send(409,{'error':str(e)[:200]})
+   except (ValueError,KeyError,TypeError,OSError) as e:return self.send(400,{'error':str(e)[:200]})
+  if route.startswith('/api/llm/'):
+   from . import llm_settings
+   try:
+    size=int(self.headers.get('Content-Length','0'))
+    if not 0<size<=20000:raise ValueError('请求大小超限')
+    raw=json.loads(self.rfile.read(size))
+    if not isinstance(raw,dict):raise ValueError('无效请求')
+    if route=='/api/llm/settings':return self.send(200,llm_settings.save(ROOT,raw))
+    if route=='/api/llm/clear':return self.send(200,llm_settings.clear(ROOT))
+    if route=='/api/llm/test':return self.send(200,llm_settings.test(ROOT,raw))
+    if route=='/api/llm/models':return self.send(200,llm_settings.models(ROOT,raw))
+    return self.send(404,{'error':'Not found'})
    except (ValueError,KeyError,TypeError,OSError) as e:return self.send(400,{'error':str(e)[:200]})
   if route.startswith('/api/workbench/'):
    from . import demo_workbench as wb

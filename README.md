@@ -101,12 +101,12 @@ Open **http://127.0.0.1:8790**, upload a `.dem` file (or link Steam), and open t
 
 - Weapon icons are imported from your CS2 install with `experiments/import-icons.ps1`.
 - Movement prediction needs the trained checkpoints in `outputs/movement/comparison/`. These are local artifacts, not stored in git.
-- The Agent review is optional. Configure a model endpoint in `.env` (see `.env.example`).
+- The Agent is optional. Click **Model** in the top bar, pick a provider (Anthropic Claude, OpenAI, Google Gemini, DeepSeek, Qwen, Moonshot Kimi, Zhipu GLM, xAI Grok, Mistral, OpenRouter, Groq, Ollama, or any OpenAI-compatible endpoint), paste your API key and press **Test connection**. No `.env` editing needed; `.env` still works as a fallback (see `.env.example`).
 
 ## Privacy and trust
 
 - **Local by default.** The server binds to `127.0.0.1`, checks Host/Origin, and requires a per-session token for every write.
-- **Your keys stay yours.** You enter the Steam Web API key in the UI. It is stored in `data/account/secrets.json` and never sent back by the API.
+- **Your keys stay yours.** You enter the Steam Web API key and the model API key in the UI. They are stored in `data/account/` on your machine and never sent back by the API.
 - **No silent model calls.** The LLM is called only when you click, and each run has a call budget.
 - **Honest outputs.** Model results are labelled as such, inferences are separated from observed facts, and the validation reports in `outputs/` include the failure cases.
 
@@ -186,12 +186,12 @@ npm install --prefix outputs/cs2-coach-prototype                          # demo
 
 - 武器图标通过 `experiments/import-icons.ps1` 从本机 CS2 导入。
 - 移动预测需要 `outputs/movement/comparison/` 下的模型权重。这些是本地产物，不在 git 中。
-- Agent 复盘是可选功能，需要在 `.env` 中配置模型服务（参考 `.env.example`）。
+- Agent 是可选功能。点击顶栏的**模型**按钮，选择服务商（Anthropic Claude、OpenAI、Google Gemini、DeepSeek、通义千问、Kimi、智谱 GLM、xAI Grok、Mistral、OpenRouter、Groq、Ollama，或任何兼容 OpenAI 的接口），粘贴 API Key 并点击**测试连接**即可，不用改 `.env`；`.env` 仍可作为备用（参考 `.env.example`）。
 
 ### 隐私与可信度
 
 - **默认本地：** 服务只监听 `127.0.0.1`，校验 Host/Origin，所有写操作都需要会话令牌。
-- **密钥留在本机：** Steam API Key 在网页中填写，保存在 `data/account/secrets.json`，接口不会返回它。
+- **密钥留在本机：** Steam API Key 和模型 API Key 都在网页中填写，保存在本机 `data/account/`，接口不会返回它们。
 - **不偷偷调用模型：** 只有点击后才调用 LLM，每次都有调用上限。
 - **结果诚实：** 模型输出明确标注，推断与观测事实分开，`outputs/` 中的验证报告包含失败案例。
 

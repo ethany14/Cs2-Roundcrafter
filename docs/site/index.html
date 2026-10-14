@@ -6,7 +6,7 @@
 <meta name="description" content="RoundCrafter: a local-first Counter-Strike 2 demo lab with an evidence-bound AI analyst: replay rounds, find patterns across matches, plan tactics.">
 <meta property="og:title" content="RoundCrafter">
 <meta property="og:description" content="Replay any round. An AI analyst explains it, and every claim links back to a clip.">
-<meta property="og:image" content="https://ethany14.github.io/CS2-analysis-agent/images/replay.png">
+<meta property="og:image" content="https://ethany14.github.io/Cs2-Roundcrafter/images/replay.png">
 <title>RoundCrafter</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -254,7 +254,7 @@ footer a:hover{color:var(--amber)}
           <span class="zh">RoundCrafter 把你的 CS2 <span class="mono">.dem</span> 变成可以研究的实验室。AI 分析师逐回合读取证据、核对关键时刻、解释发生了什么，每条结论都能跳回可重播的片段。配套还有转播级回放、多回合热力图和战术室。</span>
         </p>
         <div class="cta boot">
-          <a class="btn primary" href="https://github.com/ethany14/CS2-analysis-agent" target="_blank" rel="noopener"><span class="en">View on GitHub</span><span class="zh">在 GitHub 查看</span> ↗</a>
+          <a class="btn primary" href="https://github.com/ethany14/Cs2-Roundcrafter" target="_blank" rel="noopener"><span class="en">View on GitHub</span><span class="zh">在 GitHub 查看</span> ↗</a>
           <a class="btn" href="#agent"><span class="en">See the Agent</span><span class="zh">了解 Agent</span></a>
         </div>
       </div>
@@ -349,7 +349,7 @@ footer a:hover{color:var(--amber)}
       <ul class="guards">
         <li><b><span class="en">Facts apart from guesses</span><span class="zh">事实与推断分开</span></b><span class="en">Each finding separates facts, inference, uncertainty and a recommendation.</span><span class="zh">每条发现分为事实、推断、不确定性和建议。</span></li>
         <li><b><span class="en">Anonymised players</span><span class="zh">选手匿名</span></b><span class="en">The model sees P1–P10. Names and SteamIDs stay on your machine, and a test enforces it.</span><span class="zh">模型只看到 P1–P10，选手名和 SteamID 留在本机，并有测试保证。</span></li>
-        <li><b><span class="en">Your model, your language</span><span class="zh">自选模型与语言</span></b><span class="en">Point it at your own endpoint in <code>.env</code>. Answers follow the 中文 / English switch.</span><span class="zh">在 <code>.env</code> 配置你自己的模型服务，回答跟随中 / 英切换。</span></li>
+        <li><b><span class="en">Your model, your language</span><span class="zh">自选模型与语言</span></b><span class="en">Pick Claude, GPT, Gemini, DeepSeek, Qwen, Kimi, GLM, Grok, Mistral or a local Ollama model, and paste your key in the app. Answers follow the 中文 / English switch.</span><span class="zh">可选 Claude、GPT、Gemini、DeepSeek、通义千问、Kimi、GLM、Grok、Mistral 或本地 Ollama 模型，在应用内粘贴密钥即可；回答跟随中 / 英切换。</span></li>
       </ul>
     </div>
   </section>
@@ -489,7 +489,7 @@ footer a:hover{color:var(--amber)}
       </div>
       <div class="rules">
         <div><div class="k">RULE 1 · GO</div><h4><span class="en">Local by default</span><span class="zh">默认本地</span></h4><p><span class="en">The server binds to <code>127.0.0.1</code>, checks Host and Origin, and requires a session token for every write.</span><span class="zh">服务只监听 <code>127.0.0.1</code>，校验 Host / Origin，所有写操作都需要会话令牌。</span></p></div>
-        <div><div class="k">RULE 2 · GO</div><h4><span class="en">Your keys stay yours</span><span class="zh">密钥留在本机</span></h4><p><span class="en">The Steam Web API key is stored locally and never sent back by the API.</span><span class="zh">Steam API Key 保存在本地，接口不会把它返回。</span></p></div>
+        <div><div class="k">RULE 2 · GO</div><h4><span class="en">Your keys stay yours</span><span class="zh">密钥留在本机</span></h4><p><span class="en">Your Steam and model API keys are stored on your machine and never sent back by the API.</span><span class="zh">Steam 和模型 API Key 都保存在你的电脑上，接口不会把它们返回。</span></p></div>
         <div><div class="k">RULE 3 · GO</div><h4><span class="en">No silent model calls</span><span class="zh">不偷偷调用模型</span></h4><p><span class="en">The LLM runs only when you click, and each run has a call budget.</span><span class="zh">只有点击后才调用 LLM，每次都有调用上限。</span></p></div>
         <div><div class="k">RULE 4 · GO</div><h4><span class="en">Honest outputs</span><span class="zh">结果诚实</span></h4><p><span class="en">Model results are labelled, inferences are kept apart from observed facts, and validation reports include the failures.</span><span class="zh">模型输出明确标注，推断与观测事实分开，验证报告包含失败案例。</span></p></div>
       </div>
@@ -509,7 +509,7 @@ footer a:hover{color:var(--amber)}
             <li>Python<b>≥ 3.12</b></li>
             <li>Node<b>≥ 22</b></li>
             <li><span class="en">CS2 install</span><span class="zh">本机 CS2</span><b><span class="en">radar + icons</span><span class="zh">雷达图与图标</span></b></li>
-            <li><span class="en">LLM endpoint</span><span class="zh">模型服务</span><b><span class="en">optional</span><span class="zh">可选</span></b></li>
+            <li><span class="en">Model API key</span><span class="zh">模型 API Key</span><b><span class="en">optional, set in app</span><span class="zh">可选，在应用内设置</span></b></li>
           </ul>
           <p class="after"><span class="en">Then open <code>http://127.0.0.1:8790</code>, upload a <code>.dem</code> or link Steam, and open the match.</span><span class="zh">然后打开 <code>http://127.0.0.1:8790</code>，上传 <code>.dem</code> 或绑定 Steam，打开比赛即可。</span></p>
         </div>
@@ -529,7 +529,7 @@ footer a:hover{color:var(--amber)}
 <footer>
   <div class="wrap">
     <span>ROUNDCRAFTER · <span class="en">Demo analysis for Counter-Strike 2</span><span class="zh">Counter-Strike 2 demo 分析</span></span>
-    <a href="https://github.com/ethany14/CS2-analysis-agent" target="_blank" rel="noopener">github.com/ethany14/CS2-analysis-agent ↗</a>
+    <a href="https://github.com/ethany14/Cs2-Roundcrafter" target="_blank" rel="noopener">github.com/ethany14/Cs2-Roundcrafter ↗</a>
   </div>
 </footer>
 
