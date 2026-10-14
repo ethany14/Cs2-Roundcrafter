@@ -6,7 +6,11 @@ Records the Chinese intro video from **your own running app and your own demos**
 - short motion-graphics cards
 - synthesised background music, no voice-over
 
-One command produces `out/roundcrafter_zh.mp4` plus `out/roundcrafter_zh.srt` (captions you can upload to YouTube as CC).
+One command produces:
+
+- `out/roundcrafter_zh.mp4`, the video (1080p30)
+- `out/roundcrafter_zh.srt`, the captions as a subtitle file (upload to YouTube as CC)
+- `out/roundcrafter_zh.chapters.txt`, YouTube chapter timestamps to paste into the description
 
 ## What the video covers
 

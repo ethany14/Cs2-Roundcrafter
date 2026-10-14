@@ -87,10 +87,17 @@ async function aliases(d){
 // Runs inside the page before any app script: rewrites names in every JSON response, masks SteamIDs on screen.
 function privacyInit({pairs,all}){
   const esc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-  const rx=pairs.map(([n,a])=>[new RegExp('(?<![\\p{L}\\p{N}_])'+esc(JSON.stringify(n).slice(1,-1))+'(?![\\p{L}\\p{N}_])','gu'),a]);
+  // One single-pass pattern, so an alias is never rewritten by a later rule:
+  //  - any name that is a whole JSON string ("name")
+  //  - names of 4+ characters containing a letter, also inside longer text (Agent findings etc.)
+  // Short or numeric names ("123", "Dog") are only replaced as whole strings, so numbers and keys stay intact.
+  const map=new Map(pairs.map(([n,a])=>[JSON.stringify(n).slice(1,-1),a]));
+  const keys=[...map.keys()],loose=keys.filter(k=>k.length>=4&&/\p{L}/u.test(k));
+  const rx=keys.length?new RegExp('"(?:'+keys.map(esc).join('|')+')"'+(loose.length?'|(?<![\\p{L}\\p{N}_])(?:'+loose.map(esc).join('|')+')(?![\\p{L}\\p{N}_])':''),'gu'):null;
+  const sub=m=>m[0]==='"'&&m.length>1&&m.at(-1)==='"'&&map.has(m.slice(1,-1))?'"'+map.get(m.slice(1,-1))+'"':map.get(m)??m;
   const of=window.fetch;
-  window.fetch=async(...a)=>{const r=await of(...a);if(!rx.length||!(r.headers.get('content-type')||'').includes('json'))return r;
-    let t=await r.text();for(const [re,al] of rx)t=t.replace(re,al);return new Response(t,{status:r.status,statusText:r.statusText,headers:r.headers})};
+  window.fetch=async(...a)=>{const r=await of(...a);if(!rx||!(r.headers.get('content-type')||'').includes('json'))return r;
+    const t=(await r.text()).replace(rx,sub);return new Response(t,{status:r.status,statusText:r.statusText,headers:r.headers})};
   const SID=/7656119\d{10}/g,mask=s=>s.replace(SID,m=>m.slice(0,7)+'••••••••••');
   const walk=n=>{if(n.nodeType===3){if(SID.test(n.data)){SID.lastIndex=0;n.data=mask(n.data)}SID.lastIndex=0}else for(const c of n.childNodes)walk(c)};
   new MutationObserver(ms=>{for(const m of ms){if(m.type==='characterData')walk(m.target);for(const x of m.addedNodes)walk(x)}}).observe(document,{subtree:true,childList:true,characterData:true});
@@ -176,9 +183,10 @@ function buildShots(d){
     ['move','.wb-modes button[data-mode=nade]',0.3,0.8],['click',1.2],['until',1.25,WB_READY,60000],['wait',1.3,500],
     ['move','#wbNade button:has-text("闪光")',2.2,0.7],['click',3.0],['wait',3.05,400],['click',4.0],['wait',4.05,400],
     ['move','#wbNade button:has-text("燃烧")',4.5,0.5],['click',5.1],['wait',5.15,400],['click',5.9],['wait',5.95,400],
-    ['move','#wbNade select >> nth=0',6.4,0.6],['select',7.1,'#wbNade select >> nth=0',{index:1}],['until',7.15,WB_READY,60000],
-    ['move','#wbNade button:has-text("◎") >> nth=0',8.0,0.8],['click',8.9],['wait',8.95,400],['move',[880,560],9.5,1.6],
-    ['js',12.9,`const s=document.querySelector('#wbNade select');if(s){s.selectedIndex=0;s.dispatchEvent(new Event('change'))}`]]},wbWhy);
+    ['move','#wbNade select >> nth=0',6.4,0.6],['select',7.1,'#wbNade select >> nth=0',{index:1}],['until',7.15,WB_READY,60000],['move',[880,560],7.6,0.8],
+    ['move','#wbNade select >> nth=0',8.6,0.6],['select',9.2,'#wbNade select >> nth=0',{index:0}],['until',9.25,WB_READY,60000],
+    ['js',9.3,`const c=document.getElementById('wbClusters');let d=c?.closest('details');while(d){d.open=true;d=d.parentElement?.closest('details')}c?.scrollIntoView({block:'nearest'})`],
+    ['move','#wbClusters button >> nth=0',9.5,0.7],['click',10.3],['wait',10.35,400],['move',[880,560],10.8,1.4]]},wbWhy);
   add({id:'wbpro',kind:'app',dur:10,caps:[[0,'对照职业：同样的筛选条件，左边是你，右边是职业比赛'],[5,'热力图、道具、Agent 分析都能并排比较']],acts:[
     ['until',0,WB_READY,60000],
     d.proVerified?['wait',0.1,1]:['js',0.1,`const c=document.getElementById('wbDeclared');if(!c.checked){c.checked=true;c.dispatchEvent(new Event('change'))}`],
@@ -249,10 +257,13 @@ async function setOverlay(p,o){await p.evaluate(o=>{const $=id=>document.getElem
   const s=$('vo-sub');s.style.display=o.caption?'flex':'none';s.firstChild.textContent=o.caption||'';
   $('vo-prog').style.width=o.progress+'%';$('vo-fade').style.opacity=o.fade},o)}
 
+// Open any collapsed <details> around a control and scroll it into view, so it can be shown and used.
+async function reveal(p,sel){if(typeof sel!=='string'||/>>|text=|:has-text/.test(sel))return;
+  await p.evaluate(sel=>{const e=document.querySelector(sel);if(!e)return;let d=e.closest('details');while(d){d.open=true;d=d.parentElement?.closest('details')}e.scrollIntoView({block:'nearest'})},sel).catch(()=>{})}
 async function center(p,target){
   if(Array.isArray(target)&&target[0]>1)return {x:target[0],y:target[1]};
   if(Array.isArray(target))return uvToScreen(p,target);
-  const b=await p.locator(target).first().boundingBox({timeout:3000});if(!b)throw new Error('not visible: '+target);
+  await reveal(p,target);const b=await p.locator(target).first().boundingBox({timeout:3000});if(!b)throw new Error('not visible: '+target);
   return {x:b.x+Math.min(b.width/2,140),y:b.y+Math.min(b.height/2,120)};
 }
 // Review / tactic board: radar UV → screen through the SVG's own transform.
@@ -275,7 +286,7 @@ const until=async(p,expr,ms)=>{const t0=Date.now();await p.clock.runFor(300);awa
   if(flag('list')){for(const s of SHOTS)console.log(s.id.padEnd(12),s.kind,s.dur+'s',(s.caps||[]).map(c=>c[1]).join(' / '));return}
   const TOTAL=SHOTS.reduce((a,s)=>a+s.dur,0);log(`${SHOTS.length} shots, ${TOTAL.toFixed(1)} s`);
   fs.mkdirSync(OUTDIR,{recursive:true});const PREV=path.join(OUTDIR,'preview');if(PREVIEW)fs.mkdirSync(PREV,{recursive:true});
-  const pairs=await aliases(d);if(pairs.length)log(`anonymising ${pairs.length} player names (anonymize: ${CFG.anonymize})`);
+  const pairs=await aliases(d);if(pairs.length)log(`anonymising ${pairs.length} player names (anonymize: ${CFG.anonymize})`);if(flag('debug'))log(pairs.map(p=>p.join('→')).join(', '));
 
   const b=await chromium.launch(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{});
   const ctx=await b.newContext({viewport:{width:W,height:H},deviceScaleFactor:1});
@@ -314,8 +325,11 @@ const until=async(p,expr,ms)=>{const t0=Date.now();await p.clock.runFor(300);awa
               case 'click':rip=1;await app.mouse.click(cur.x,cur.y);await app.waitForTimeout(250);break;
               case 'clickUV':{const q=await uvToScreen(app,a[2]);move={from:{...cur},to:q,t0:t,d:0.25};cur=q;rip=1;await app.mouse.click(q.x,q.y);await app.waitForTimeout(150);break}
               case 'labUV':{if(!a[2])break;const q=await labUvToScreen(app,a[2]);move={from:{...cur},to:q,t0:t,d:0.5};cur=q;rip=1;await app.mouse.click(q.x,q.y);await app.waitForTimeout(250);break}
-              case 'select':rip=1;await app.selectOption(a[2],a[3],{timeout:3000});await app.waitForTimeout(300);break;
-              case 'fill':rip=1;await app.fill(a[2],a[3],{timeout:3000});await app.dispatchEvent(a[2],'change');await app.waitForTimeout(300);break;
+              case 'select':{rip=1;await reveal(app,a[2]);const h=await app.locator(a[2]).first().elementHandle({timeout:3000});
+                // Set the value in the page (no focus, so no native picker is ever drawn), then fire the events the app listens to.
+                const ok=await h.evaluate((e,v)=>{const i=typeof v==='object'?v.index:[...e.options].findIndex(o=>o.value===v&&!o.disabled);if(i<0||i>=e.options.length||e.options[i].disabled)return false;e.selectedIndex=i;e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return true},a[3]);
+                if(!ok)throw new Error('option not available: '+JSON.stringify(a[3]));await app.waitForTimeout(300);break}
+              case 'fill':rip=1;await reveal(app,a[2]);await app.fill(a[2],a[3],{timeout:3000});await app.dispatchEvent(a[2],'change');await app.waitForTimeout(300);break;
               case 'wait':await app.waitForTimeout(a[2]);break;
               case 'js':await app.evaluate(a[2]);await app.waitForTimeout(200);break;
               case 'until':if(!await until(app,a[2],a[3]))log(`  (still waiting after ${a[3]/1000}s: ${shot.id})`);break;
@@ -324,7 +338,7 @@ const until=async(p,expr,ms)=>{const t0=Date.now();await p.clock.runFor(300);awa
               case 'drag2':{const bb=await app.locator(a[2]).boundingBox();const p0={x:bb.x+bb.width*a[3],y:bb.y+bb.height/2},p1={x:bb.x+bb.width*a[4],y:bb.y+bb.height/2};cur=p0;await app.mouse.move(p0.x,p0.y);await app.mouse.down();drag={p0,p1,t0:t,d:a[5]};break}
               case 'goto':await app.goto(CFG.app+a[2]);await settle(30);await injectOverlay(app);break;
             }
-          }catch(e){log(`  action failed in ${shot.id}: ${a[0]} ${typeof a[2]==='string'?a[2]:''} — ${e.message.split('\n')[0]}`)}
+          }catch(e){log(`  action failed in ${shot.id}: ${a[0]} ${[a[1],a[2]].find(x=>typeof x==='string')||''} — ${e.message.split('\n')[0]}`)}
         }
         if(move){const k=Math.min(1,(t-move.t0)/move.d),e=ease(k);cur={x:move.from.x+(move.to.x-move.from.x)*e,y:move.from.y+(move.to.y-move.from.y)*e};if(k>=1)move=null;await app.mouse.move(cur.x,cur.y)}
         if(drag){const k=Math.min(1,(t-drag.t0)/drag.d),e=ease(k);cur={x:drag.p0.x+(drag.p1.x-drag.p0.x)*e,y:drag.p0.y+(drag.p1.y-drag.p0.y)*e};await app.mouse.move(cur.x,cur.y);if(k>=1){await app.mouse.up();drag=null}}
@@ -343,6 +357,12 @@ const until=async(p,expr,ms)=>{const t0=Date.now();await p.clock.runFor(300);awa
   // captions as .srt (handy for YouTube CC), then music + mux
   const ts=x=>{const ms=Math.round(x*1000);return [Math.floor(ms/3600000),Math.floor(ms/60000)%60,Math.floor(ms/1000)%60].map(n=>String(n).padStart(2,'0')).join(':')+','+String(ms%1000).padStart(3,'0')};
   fs.writeFileSync(OUT.replace(/\.mp4$/,'.srt'),srt.map((s,i)=>`${i+1}\n${ts(s[0])} --> ${ts(s[1]-0.05)}\n${s[2]}\n`).join('\n'),'utf8');
+  // YouTube chapters (paste into the description). YouTube needs 00:00 first and chapters of 10 s or more.
+  const CH={title:'开场 · 导入与 2D 回放',agent:'AI 分析师',procompare:'职业对照',board:'战术板','chap-multi':'多回合分析：热力图 · 道具 · 筛选','chap-career':'我的生涯','chap-lab':'道具实验室',models:'模型设置与结尾'};
+  const mmss=x=>String(Math.floor(x/60)).padStart(2,'0')+':'+String(Math.floor(x%60)).padStart(2,'0');
+  let chapters=[],acc=0;for(const s of SHOTS){if(CH[s.id])chapters.push([acc,CH[s.id]]);acc+=s.dur}
+  chapters=chapters.filter((c,i)=>i===0||c[0]-chapters[i-1][0]>=10);if(chapters.length>1&&TOTAL-chapters.at(-1)[0]<10)chapters.pop();chapters[0][0]=0;
+  fs.writeFileSync(OUT.replace(/\.mp4$/,'')+'.chapters.txt',chapters.map(c=>mmss(c[0])+' '+c[1]).join('\n')+'\n','utf8');
   const wav=OUT.replace(/\.mp4$/,'')+'.music.wav';
   const py=/[\\/]/.test(CFG.python)?path.resolve(HERE,CFG.python):CFG.python;
   const mus=spawnSync(py,[path.join(HERE,'music.py'),TOTAL.toFixed(3),cuts.slice(1).map(c=>c.toFixed(2)).join(','),wav],{stdio:'inherit'});
