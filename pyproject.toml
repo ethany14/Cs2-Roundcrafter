@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cs2-agent"
+version = "0.3.0"
+description = "Independent CS2 workspace built on the extracted Eregion AgentLoop"
+requires-python = ">=3.12"
+dependencies = [
+  "numpy==2.5.4",
+  "langchain-core==1.6.3",
+  "sqlalchemy==2.0.52",
+  "httpx==0.28.1",
+  "python-dotenv==1.1.1",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10"]
+
+[project.scripts]
+cs2-agent = "cs2_agent.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["backend"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

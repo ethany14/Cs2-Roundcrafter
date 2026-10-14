@@ -1,0 +1,11 @@
+{
+  "python_tests": 20,
+  "node_extraction_tests": 4,
+  "real_demos": 6,
+  "rounds": 129,
+  "states": 561,
+  "agent_tools_real_dataset_read": true,
+  "paid_calls": 0,
+  "sample_gate_passed": false,
+  "ready_for_player_advice": false
+}

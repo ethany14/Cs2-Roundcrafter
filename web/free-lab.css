@@ -1,0 +1,35 @@
+/* Utility lab layout on top of mission.css: numbered steps · viewport · results. */
+.lab{height:calc(100vh - 50px);display:grid;grid-template-columns:300px minmax(0,1fr) 320px;gap:14px;padding:14px 16px 12px}
+.lab-steps,.lab-results{display:flex;flex-direction:column;min-height:0}
+.lab-steps>.mc-body,.lab-results>.mc-body{overflow:auto;flex:1}
+.step{padding:4px 0 12px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.step h3{display:flex;align-items:center;gap:8px;font-size:16px;text-transform:uppercase;margin:6px 0 4px}
+.step h3 i{font:700 10px var(--mono);font-style:normal;color:#fff;background:var(--red);padding:2px 5px}
+.field{display:flex;flex-direction:column;gap:4px;margin:8px 0;font:10px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.field.inline{flex-direction:row;align-items:center;margin:0}
+.field input,.field select,.field textarea{text-transform:none;letter-spacing:0}
+.row{display:flex;gap:8px;align-items:flex-end}
+.row.two>.field{flex:1}
+.wide{width:100%;margin:4px 0}
+.readout,.readout-box{font:12px var(--mono);color:var(--amber)}
+.readout-box{min-height:42px;padding:8px;border:1px solid var(--line);background:var(--bg2);margin:8px 0}
+.lab-view{display:flex;flex-direction:column;min-height:0;padding:10px}
+.viewbar{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.legend{margin-left:auto;display:flex;align-items:center;gap:6px;font:10px var(--mono);color:var(--dim);text-transform:uppercase}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:6px}
+#viewport{position:relative;flex:1;min-height:360px;border:1px solid var(--line2);overflow:hidden}
+#viewport canvas{display:block;touch-action:none}
+.hint{position:absolute;top:10px;left:10px;z-index:2;pointer-events:none;padding:6px 10px;background:#08090bdd;border-left:2px solid var(--amber);font:11px var(--mono);color:var(--ink2)}
+#crosshair{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;color:var(--red);font:32px var(--mono);pointer-events:none}
+.dock{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-top:8px}
+.dock .cut input{width:140px}
+.lab-results .detail{color:var(--ink);font:12px/1.6 var(--mono);border-left:2px solid var(--red);padding:6px 10px;background:#fc3d210a}
+#command{width:100%;height:64px;font:11px var(--mono);resize:vertical}
+#timeline{width:100%}
+.lab-results .mc-hazard{margin:14px 0 8px}
+.warning{color:var(--amber);font-size:11px}
+details{border-top:1px solid var(--line);margin-top:4px}
+details select{width:100%;margin-top:6px}
+@media(max-width:1200px){.lab{grid-template-columns:270px minmax(0,1fr)}.lab-results{grid-column:1/-1}}
+@media(max-width:850px){.lab{display:flex;flex-direction:column;height:auto}#viewport{height:430px;flex:none}.legend{display:none}}
+#viewport canvas.lab2d{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;touch-action:none}

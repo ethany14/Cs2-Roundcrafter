@@ -1,0 +1,13 @@
+{
+  "map": "de_dust2",
+  "instructions": "Add local demos to demos. Use one match_id for a whole BO3/BO5; earlier matches train, later matches test. Keep source_url and actual match date. Professional is a curator assertion. See example_entry; it is not loaded automatically.",
+  "demos": [],
+  "example_entry": {
+    "path": "../../data/demos/your-match-dust2.dem",
+    "match_id": "hltv-match-id",
+    "source_url": "HLTV match page URL",
+    "date": "2026-01-01",
+    "professional": true,
+    "split": "train"
+  }
+}

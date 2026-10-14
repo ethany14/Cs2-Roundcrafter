@@ -1,0 +1,12 @@
+{
+  "passed": true,
+  "testsPassed": 10,
+  "smoke": "completed",
+  "smokeCalls": 2,
+  "liveModelCalled": false,
+  "workspaceConfigValidated": true,
+  "coreSourceHashesVerified": true,
+  "independentVenv": true,
+  "webPrototypeMigrated": false,
+  "situationModelImplemented": false
+}

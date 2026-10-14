@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>比赛复盘 · CS2 Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="/mission.css"><link rel="stylesheet" href="/demo-review.css"><link rel="stylesheet" href="/demo-workbench.css">
+<script src="/i18n-en.js"></script><script src="/i18n.js"></script>
+</head>
+<body data-view="analysis">
+<header class="mc-top">
+  <a class="mc-brand" href="/demos"><b>CS</b>CS2 AGENT<span>MISSION CONTROL</span></a>
+  <nav class="mc-nav" aria-label="主导航">
+    <button data-view="matches"><i>01</i>比赛库</button>
+    <button data-view="review"><i>02</i>单回合复盘</button>
+    <button data-view="analysis"><i>03</i>多回合分析</button>
+    <button data-view="room"><i>04</i>战术室</button>
+    <button data-view="profile"><i>05</i>我的生涯</button>
+    <a href="/lab"><i>06</i>道具实验室</a>
+  </nav>
+  <div class="mc-status"><span class="mc-led" aria-hidden="true"></span><span>本地计算</span><div class="mc-lang" data-lang-toggle aria-label="语言"></div></div>
+  <button id="imports" hidden>比赛与上传</button>
+</header>
+
+<main>
+<!-- 01 MATCHES -->
+<section id="importPanel" class="mc-view v-matches">
+  <div class="mc-panel matches-list">
+    <div class="mc-head"><i>01.A</i>比赛记录<span class="mc-aside">点击已完成的比赛进入复盘</span></div>
+    <div id="library" class="mc-body library"></div>
+  </div>
+  <div class="mc-panel matches-import">
+    <div class="mc-head"><i>01.B</i>导入 demo</div>
+    <div class="mc-body">
+      <h1 class="hero">从比赛里<br>拆解战术</h1>
+      <p>上传 demo，沿着真实路线与道具时序复盘每个回合。</p>
+      <label class="field">上传类型<select id="uploadKind"><option value="player">普通玩家 demo</option><option value="professional">职业比赛 demo</option></select></label>
+      <label class="field">来源链接<input id="uploadSource" type="url" placeholder="职业比赛来源链接（职业 demo 必填）"></label>
+      <label class="upload">选择 .dem 文件<input id="file" type="file" accept=".dem"></label>
+      <p class="mc-note">本机解析 · 最大 1 GiB · 类型由上传者声明；有本地来源档案的职业 demo 另行标记来源依据。</p>
+      <div class="mc-hazard"></div>
+      <label class="field">或解析本地样本<select id="samples"></select></label>
+      <button id="sample" class="mc-primary wide">解析本地比赛</button>
+      <p id="status" role="status" class="mc-mono">准备就绪</p>
+      <button id="cancel" hidden>取消任务</button>
+    </div>
+  </div>
+</section>
+
+<!-- 02 REVIEW -->
+<section class="mc-view v-review">
+  <div class="subbar">
+    <div class="title"><small id="meta" class="mc-mono"></small><h2 id="title">选择一场比赛开始</h2></div>
+    <div class="subbar-controls">
+      <button id="prev" title="上一回合">‹</button><select id="round" aria-label="回合"></select><button id="next" title="下一回合">›</button>
+      <select id="side" aria-label="阵营"><option value="T">T 战术</option><option value="CT">CT 战术</option></select>
+      <details class="mc-pop"><summary>更多</summary><div class="pop-body">
+        <label class="field">整场战术候选<select id="candidates" aria-label="整场战术候选"></select></label>
+        <div id="pilotLinks"></div>
+        <p id="limits" class="mc-note">自动整理的是有证据的战术候选；队内意图与指挥内容仍然未知。</p>
+      </div></details>
+    </div>
+  </div>
+  <div class="workspace">
+    <div class="arena mc-panel">
+      <div class="hud" aria-live="off"><span class="hud-side t"><em id="hudTName">T</em><b id="hudTScore">–</b></span><span class="hud-clock"><b id="hudClock">1:55</b><small id="hudPhase">回合时间</small><small class="hud-alive" title="存活人数"><i id="hudT">0</i> v <i id="hudCT">0</i></small></span><span class="hud-side ct"><b id="hudCTScore">–</b><em id="hudCTName">CT</em></span></div>
+      <div class="arena-tools">
+        <select id="floor" aria-label="楼层"><option value="upper">上层</option><option value="lower">下层</option></select>
+        <select id="trailLen" aria-label="轨迹长度"><option value="0">无轨迹</option><option value="3" selected>轨迹 3 秒</option><option value="8">轨迹 8 秒</option></select>
+        <button id="reset">重置视角</button>
+        <button id="mode" title="把当前画面复制到战术板上编辑">✎ 战术板</button>
+      </div>
+      <div class="map-stack mc-grid-bg">
+        <canvas id="replayCanvas" aria-label="2D 比赛回放"></canvas>
+        <svg id="map" viewBox="0 0 1024 1024" aria-label="2D 比赛回放与战术板"><image id="radar" width="1024" height="1024"/><g id="ink"></g><g id="markers"></g></svg>
+        <div id="killfeed" aria-label="最近击杀"></div>
+        <span id="replaySource" class="replay-source mc-mono"></span><div class="tb-playbar"><span id="tbStageLabel" class="mc-mono"></span><button id="tbBackToEdit" class="mc-primary" hidden>✎ 返回编辑</button></div>
+      </div>
+      <div class="transport">
+        <div class="transport-row">
+          <button id="play" class="mc-primary play">播放</button>
+          <select id="speed" aria-label="倍速"><option value="0.5">0.5×</option><option selected value="1">1×</option><option value="2">2×</option><option value="4">4×</option></select>
+          <div class="scrub"><div id="eventTicks" aria-label="事件刻度"></div><input id="timeline" aria-label="回放时间" type="range" min="0" max="100" step="0.01" value="0"></div>
+          <span id="time" class="readout">0.00s</span>
+        </div>
+        <div id="roundStrip"></div>
+        <div id="phases" class="toolbar"></div>
+      </div>
+      <div id="editing" hidden>
+        <div class="tb-rail"><div id="tbTools" class="tb-tools"></div><div id="tbColors" class="tb-colors"></div><button id="tbUndo" title="撤销 (Ctrl+Z)">↶</button><button id="tbRedo" title="重做 (Ctrl+Y)">↷</button></div>
+        <div class="tb-bar">
+          <div class="tb-row"><b class="tb-title">战术板</b><div id="tbStages" class="tb-stages"></div><button id="addStage" title="复制当前阶段为下一阶段">＋ 阶段</button><button id="tbDelStage">删除阶段</button><label class="field inline">本阶段时长<input id="tbDur" type="number" min="0.5" max="30" step="0.5" value="4">秒</label><button id="tbPlay" class="mc-primary" title="把各阶段连成可播放的演示">▶ 演示</button></div>
+          <div class="tb-row"><input id="note" placeholder="阶段说明（例如：A 大双人先出，等闪）"><button id="tbClearStage" title="清除本阶段的标注">清除标注</button><button id="tbBlank" title="移除本阶段全部队员，从空白开始">清空队员</button></div>
+          <div class="tb-row"><input id="boardName" placeholder="战术板名称" value="我的战术方案"><button id="save" class="mc-primary">保存</button><select id="boards" aria-label="已保存方案"><option value="">加载已保存方案</option></select><button id="tbExport">导出 PNG</button><button id="replay">返回回放</button><span id="tbStatus" class="mc-note"></span></div>
+          <p class="mc-note">战术方案独立于比赛证据。快捷键：V 移动 · A 箭头 · P 画笔 · T 文字 · S/F/M/H 道具 · E 橡皮 · Delete 删除 · 右键拖动平移</p>
+        </div>
+      </div>
+      <div id="players" hidden></div>
+    </div>
+    <article class="mc-panel review-side">
+      <div class="mc-tabs panel-tabs" role="tablist"><button id="rosterTab" aria-selected="true">计分板</button><button id="analysisTab">Agent 解读</button><button id="matchTab">整场分析</button><button id="compareTab">职业对照</button><button id="statsTab">比赛数据</button><button id="casesTab" hidden>案例库</button></div>
+      <div class="side-body">
+        <div id="roster"></div>
+        <div id="coachPane" hidden><div id="coach"></div>
+          <details class="raw"><summary>规则证据与事件时间线</summary><h3 id="tactic">逐回合战术候选</h3><div id="details"></div><h3>事件时间线</h3><div id="events"></div></details>
+        </div>
+        <div id="matchCoach" hidden><h2>整场战术分析</h2><p id="analysisStatus" role="status"></p>
+          <details id="analysisSetup"><summary>启动或重新分析</summary><p id="analysisScope" class="mc-note"></p><label class="check"><input id="analysisConsent" type="checkbox">允许发送上述匿名证据用于战术分析</label><div class="toolbar"><label class="field inline">本次最多调用<input id="analysisBudget" type="number" min="1" max="200" value="20"></label><label class="field inline">同时分析<select id="analysisConcurrency"><option value="1">1 回合</option><option value="2">2 回合</option><option value="3" selected>3 回合</option><option value="4">4 回合</option></select></label></div><p class="mc-note">通常每回合 1 次，仅允许再修正 1 次。整批最多运行 30 分钟。已完成的新版本结果会复用，取消后保留已完成回合。</p><div class="toolbar"><button id="analyzeMatch" class="mc-primary">分析未完成回合</button><button id="analyzeRound">重新分析当前回合</button></div></details>
+          <button id="cancelAnalysis" hidden>取消整批分析</button>
+          <div id="analysisRounds"></div><div id="analysisClaims"></div></div>
+        <div id="comparePanel" hidden><h2>寻找可比职业回合</h2><p id="currentIdentity" class="mc-note"></p><button id="findComparison" class="mc-primary">匹配当前回合</button><p id="comparisonStatus" role="status"></p><div id="comparisonCandidates"></div><details><summary>修改当前 demo 类型</summary><select id="identityKind"><option value="unknown">未分类</option><option value="player">普通玩家</option><option value="professional">职业比赛</option></select><input id="identitySource" type="url" placeholder="职业比赛来源链接"><button id="saveIdentity">保存类型</button><p class="mc-note">职业标记来自上传者声明或已有来源档案，不根据比赛水平自动判断。</p></details></div>
+        <div id="statsPanel" hidden><h2>整场数据</h2><div id="matchStats"></div></div>
+        <div id="casesPanel" hidden><h2>战术案例库</h2><p>检索历史模型推断，回到原始比赛核对。</p><input id="caseQuery" aria-label="搜索战术案例" placeholder="例如：Secret 转 B、斜坡回防"><div class="toolbar"><select id="caseMap" aria-label="案例地图"><option value="">全部地图</option><option value="de_nuke">Nuke</option><option value="de_dust2">Dust2</option></select><select id="caseSide" aria-label="案例阵营"><option value="">双方</option><option value="T">进攻</option><option value="CT">防守</option></select><button id="caseSearch">检索案例</button></div><p id="caseStatus" role="status"></p><div id="caseResults"></div><div id="caseLearning"></div></div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- 04 TACTIC ROOM -->
+<section class="mc-view v-room">
+  <div class="mc-panel room-list">
+    <div class="mc-head"><i>04.A</i>我的战术室<span class="mc-aside">战术方案独立于比赛证据，可随时编辑与复用</span></div>
+    <div class="mc-body">
+      <div class="room-filters">
+        <select id="roomMap" aria-label="地图"><option value="">全部地图</option><option value="de_dust2">Dust2</option><option value="de_mirage">Mirage</option><option value="de_inferno">Inferno</option><option value="de_nuke">Nuke</option><option value="de_ancient">Ancient</option><option value="de_anubis">Anubis</option><option value="de_cache">Cache</option></select>
+        <input id="roomSearch" placeholder="搜索名称、标签、备注">
+        <select id="roomTag" aria-label="标签"><option value="">全部标签</option></select>
+        <select id="roomFolder" aria-label="文件夹"><option value="">全部文件夹</option></select>
+        <button id="roomNew" class="mc-primary">＋ 新建战术</button>
+      </div>
+      <div id="roomCards" class="room-cards"></div>
+      <details id="roomLegacy"><summary>比赛中保存的旧战术板</summary><div id="roomLegacyList"></div></details>
+    </div>
+  </div>
+  <div class="mc-panel room-detail">
+    <div class="mc-head"><i>04.B</i>战术详情</div>
+    <div class="mc-body" id="roomDetail"><p class="mc-note">选择左侧战术查看预览，或新建一个空白战术。</p></div>
+  </div>
+</section>
+
+<!-- 05 PROFILE -->
+<section class="mc-view v-profile">
+  <div class="profile-side">
+    <div class="mc-panel"><div class="mc-head"><i>05.A</i>Steam 账号</div><div class="mc-body" id="accountCard"></div></div>
+    <div class="mc-panel"><div class="mc-head"><i>05.B</i>自动追踪</div><div class="mc-body" id="trackingCard"></div></div>
+    <div class="mc-panel"><div class="mc-head"><i>05.C</i>查看选手</div><div class="mc-body"><input id="playerSearch" list="playerList" placeholder="输入选手名（本机 demo 中出现过的）"><datalist id="playerList"></datalist><div id="playerQuick" class="player-quick"></div></div></div>
+  </div>
+  <div class="mc-panel profile-main"><div class="mc-head"><i>05.D</i>生涯数据<span class="mc-aside" id="profileWho"></span></div><div class="mc-body" id="profileStats"><p class="mc-note">关联 Steam 账号或选择一名选手查看数据。</p></div></div>
+</section>
+
+<!-- 03 ANALYSIS -->
+<section class="mc-view v-analysis">
+  <div class="subbar" id="wbTop">
+    <button id="wbFilterToggle" class="filter-toggle" aria-pressed="true">筛选 <b id="wbFilterCount"></b></button>
+    <label class="wb-source" title="选择要分析的比赛">数据来源<select id="wbSource"><option value="player">我的比赛</option><option value="pro">职业比赛</option><option value="unknown">未分类</option></select></label><button id="wbCompareToggle" aria-pressed="false" title="把当前数据与职业比赛并排对照（热力图、道具、Agent）">⇄ 对照职业</button>
+    <div class="mc-seg wb-modes" role="tablist" aria-label="视图"><button data-mode="single" hidden>单回合</button><button data-mode="multi">多回合</button><button data-mode="heat">热力图</button><button data-mode="nade">道具</button></div>
+    <span id="wbCount" class="wb-count readout"></span>
+    <button id="wbReset" title="恢复默认筛选">重置</button>
+  </div>
+  <div id="wbChips" class="wb-chips"></div>
+  <div class="wb-body">
+    <aside id="wbFilters" class="wb-filters mc-panel">
+      <div class="mc-head"><i>03.F</i>筛选条件</div>
+      <div class="mc-body">
+        <details open><summary>范围</summary>
+          <div class="wb-row"><label class="field">地图<select id="wbMap"><option value="de_dust2">Dust2</option><option value="de_nuke">Nuke</option></select></label><label class="field">阵营<select id="wbSide"><option value="T">T 进攻</option><option value="CT">CT 防守</option></select></label></div>
+                    <label class="check" title="默认只用已核对来源的职业比赛"><input type="checkbox" id="wbDeclared">包含未核验的职业比赛</label>
+          <div id="wbMatches" class="wb-list"></div>
+        </details>
+        <details open><summary>对齐与时间</summary>
+          <div class="wb-row"><select id="wbAlign" aria-label="对齐方式" title="相对对齐点；缺少对齐事件的回合会被排除并计数，不会换成其他对齐点。"><option value="round_start">按回合开始</option><option value="first_entry">按首名 T 进点</option><option value="plant">按下包</option></select></div>
+          <div class="wb-row"><label class="field inline">从<input id="wbW0" type="number" step="1" value="0"></label><label class="field inline">到<input id="wbW1" type="number" step="1" value="115"></label><span class="mc-note">秒</span></div>
+        </details>
+        <details><summary>回合结果</summary>
+          <div class="wb-row"><label class="field">胜负<select id="wbOutcome"><option value="any">不限</option><option value="win">本方胜</option><option value="loss">本方负</option></select></label><label class="field">下包<select id="wbPlant"><option value="any">不限</option><option value="planted">有下包</option><option value="not_planted">未下包</option></select></label><label class="field">下包位置<select id="wbPlantSite"><option value="any">不限</option><option value="A">A</option><option value="B">B</option></select></label></div>
+        </details>
+        <details><summary>存活人数</summary>
+          <div class="wb-row"><select id="wbAliveAt" aria-label="人数判断时刻"><option value="alignment">在对齐点</option><option value="round_start">在回合开始</option><option value="time">在对齐后指定秒</option></select><input id="wbAliveTime" type="number" step="1" value="0" title="对齐后秒数" hidden></div>
+          <div class="wb-row"><label class="field inline">本方<input id="wbOwnMin" type="number" min="0" max="5" placeholder="≥"><input id="wbOwnMax" type="number" min="0" max="5" placeholder="≤"></label></div>
+          <div class="wb-row"><label class="field inline">对方<input id="wbEnemyMin" type="number" min="0" max="5" placeholder="≥"><input id="wbEnemyMax" type="number" min="0" max="5" placeholder="≤"></label></div>
+        </details>
+        <details><summary>装备与经济</summary>
+          <div class="wb-row"><select id="wbEquipAt" aria-label="装备判断时刻"><option value="opening">开局（冻结后 2 秒）</option><option value="time">对齐后指定秒</option></select><input id="wbEquipTime" type="number" value="0" hidden></div>
+          <div class="wb-row"><input id="wbWeapon" list="wbWeapons" placeholder="持有武器，如 awp"><datalist id="wbWeapons"><option value="awp"><option value="ak-47"><option value="m4a1"><option value="m4a4"><option value="ssg"><option value="deagle"></datalist><label class="field inline">步枪 ≥<input id="wbRifles" type="number" min="0" max="5"></label></div>
+          <div id="wbEconBox"><div class="wb-row"><select id="wbEconField" aria-label="经济字段"><option value="freeze_end_equip_value">冻结结束时本方装备总价值</option><option value="start_balance">回合开始时本方金钱总额</option></select></div><div class="wb-row"><input id="wbEconMin" type="number" min="0" step="500" placeholder="下限"><input id="wbEconMax" type="number" min="0" step="500" placeholder="上限"></div><p id="wbEconNote" class="mc-note"></p></div>
+        </details>
+        <details><summary>区域</summary>
+          <div class="wb-row"><select id="wbZoneMode" aria-label="区域模式"><option value="">不限</option><option value="passed">时间区间内经过</option><option value="at">对齐后指定秒位于</option></select><input id="wbZoneTime" type="number" value="0" hidden></div>
+          <div class="wb-row"><select id="wbPlace" aria-label="地点"><option value="">地点名…</option></select><select id="wbZoneFloor" aria-label="区域楼层"><option value="any">任意楼层</option><option value="upper">上层</option><option value="lower">下层</option></select></div>
+          <p id="wbZoneRect" class="mc-note"></p>
+        </details>
+        <details><summary>玩家</summary><div id="wbPlayers" class="wb-list"></div></details>
+        <details><summary>命中回合 <span id="wbRoundCount"></span></summary><div class="wb-row"><button id="wbAll">全选</button><button id="wbNone">全不选</button></div><div id="wbRounds" class="wb-list wb-rounds"></div><div id="wbExcluded"></div></details>
+        <div id="wbSupplement"></div>
+      </div>
+    </aside>
+    <div id="workbench">
+      <div class="wb-main">
+        <div class="wb-maps">
+          <div class="wb-pane mc-panel" id="wbPaneA"><div class="wb-pane-label" id="wbLabelA"></div><div class="wb-maphint" title="滚轮缩放 · 拖动平移 · Shift+拖动框选 · 点击玩家打开回合">?</div><canvas id="wbCanvasA" aria-label="多回合地图"></canvas><div class="wb-legend" id="wbLegendA"></div></div>
+          <div class="wb-pane mc-panel" id="wbPaneB" hidden><div class="wb-pane-label" id="wbLabelB"></div><canvas id="wbCanvasB" aria-label="参考组地图"></canvas><div class="wb-legend" id="wbLegendB"></div></div>
+          <div id="wbTip" class="wb-tip" hidden></div><div id="wbEmpty" class="wb-empty" hidden></div>
+        </div>
+        <div class="wb-bottom mc-panel">
+          <button id="wbPlay" class="mc-primary">播放</button>
+          <select id="wbSpeed" aria-label="倍速"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
+          <input id="wbTime" type="range" step="0.05" aria-label="相对对齐时间">
+          <span id="wbTimeLabel" class="readout"></span>
+          <select id="wbFloor" aria-label="楼层"><option value="upper">上层</option><option value="lower">下层</option></select>
+          <button id="wbBox" aria-pressed="false" title="拖动框选区域（也可按住 Shift 拖动）">框选</button>
+          <details class="mc-pop up"><summary>图层</summary><div class="pop-body">
+            <label class="field">轨迹<select id="wbTrail"><option value="0">关</option><option value="2">2 秒</option><option value="4" selected>4 秒</option><option value="8">8 秒</option><option value="999">全部</option></select></label>
+            <label class="check"><input type="checkbox" id="wbShowUtil" checked>道具</label>
+            <label class="check"><input type="checkbox" id="wbShowEnemy">对方</label>
+            <label class="check"><input type="checkbox" id="wbShowTraj" checked>真实轨迹</label>
+            <button id="wbClearBox">清除框选</button><button id="wbFit">重置视角</button>
+          </div></details>
+          <span id="wbLoad" class="mc-note load"></span><button id="wbCancelLoad" hidden>取消加载</button>
+        </div>
+      </div>
+      <div class="wb-side mc-panel" id="wbSidePanel">
+        <div class="mc-tabs" role="tablist"><button id="wbTabStats" aria-selected="true">统计</button><button id="wbTabAgent">Agent 分析</button></div>
+        <div class="side-body">
+          <div id="wbStatsPane"><div id="wbMulti"></div><div id="wbHeat" hidden></div><div id="wbNade" hidden></div><div id="wbBoxHits"></div></div>
+          <section id="wbAgent" class="wb-agent" hidden></section>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<section id="comparisonViewer" hidden aria-label="双比赛对照">
+  <div class="comparison-header"><h2>当前比赛 × 职业参考</h2><button id="closeComparison">返回单场复盘</button></div>
+  <p id="comparisonScope"></p>
+  <div class="toolbar"><button id="comparePlay" class="mc-primary">同步播放</button><select id="compareAnchor" aria-label="对齐事件"></select><select id="compareFloor" aria-label="对照地图楼层"><option value="upper">上层</option><option value="lower">下层</option></select><input id="compareTimeline" aria-label="对照相对时间" type="range" step="0.05"><span id="compareTime" class="readout"></span></div>
+  <div class="comparison-maps"><div class="mc-panel"><h3 id="currentLabel"></h3><svg id="currentMap" viewBox="0 0 1024 1024" aria-label="当前比赛地图"></svg><div class="toolbar"><button id="currentPause">单独暂停当前比赛</button><input id="currentSeek" type="range" step="0.05" aria-label="当前比赛独立时间"></div></div><div class="mc-panel"><h3 id="referenceLabel"></h3><svg id="referenceMap" viewBox="0 0 1024 1024" aria-label="职业参考地图"></svg><div class="toolbar"><button id="referencePause">单独暂停职业参考</button><input id="referenceSeek" type="range" step="0.05" aria-label="职业参考独立时间"></div></div></div>
+  <p class="mc-note">金色 T · 蓝色 CT · 灰色阵亡；各场 P 编号独立，不代表同一个人。按事件对齐，仅在共同有效时间段播放，不拉伸速度。</p>
+  <div id="comparisonFacts"></div>
+  <section class="comparison-analysis"><h2>解释差异与改法</h2><p id="comparisonSend"></p><label class="check"><input id="comparisonConsent" type="checkbox">允许发送上述匿名证据进行本次对照</label><button id="analyzeComparison" class="mc-primary">让 Agent 分析对照（最多 2 次）</button><button id="cancelComparison" hidden>取消</button><p id="comparisonAgentStatus"></p><div id="comparisonFindings"></div></section>
+</section>
+<script src="/cs-icons.js"></script><script src="/replay-engine.js"></script><script src="/demo-review.js"></script><script src="/demo-compare.js"></script><script src="/demo-workbench.js"></script><script src="/tactic-board.js"></script><script src="/player-hub.js"></script>
+</body>
+</html>

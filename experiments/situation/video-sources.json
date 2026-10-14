@@ -1,0 +1,16 @@
+{
+  "status": "directory_metadata_only_not_watched_or_used_for_training",
+  "sources": [
+    {"url":"https://www.cs2.app/demo-directory","type":"professional_pov_and_pug_directory","observed_filters":["map","CT position","T position","Pro Game / Event","PUG / Faceit / Premier"]},
+    {"url":"https://www.cs2.app/tactics-directory","type":"tactics_directory","observed_filters":["Execute","Rush","Explode","Split","Wrap","Fake","Setup","map","economy","side"]},
+    {"url":"https://www.cs2.app/directory","type":"utility_directory"}
+  ],
+  "future_annotation_template": {
+    "video_url":null,"source_page_url":null,"map":null,"match_id":null,
+    "round":null,"video_start_seconds":null,"video_end_seconds":null,"demo_tick":null,
+    "alignment_verified":false,"viewpoint":"unknown","xray_enabled":"unknown",
+    "player_known_information":[],"observed_action":null,"commentator_explanation":null,
+    "alternative_actions":[],"human_reviewed":false,"game_patch":null
+  },
+  "notes": "POV rendered from a demo may show observer X-ray and does not recover voice comms. Titles/tags are weak metadata, not verified reasons. Do not infer tactical labels from win/loss. No videos downloaded or transcribed."
+}

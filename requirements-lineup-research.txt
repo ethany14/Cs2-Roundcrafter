@@ -1,0 +1,4 @@
+# Optional tactical research channels, pinned to reviewed upstream versions.
+agent-reach @ https://github.com/Panniantong/agent-reach/archive/94f06c1969dfc1834001269d79d3ad0972d9dee6.zip
+bilibili-cli==0.6.2
+yt-dlp[default]==2026.8.19

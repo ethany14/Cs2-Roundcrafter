@@ -1,0 +1,26 @@
+.env
+.env.*
+!.env.example
+**/node_modules/
+**/data/
+work/
+*.log
+.venv/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+**/bin/
+**/obj/
+
+# Generated data: demos, parsed matches (real player names/SteamIDs), model weights, caches.
+# Only Markdown reports under outputs/ are versioned.
+outputs/**
+!outputs/**/
+!outputs/**/*.md
+*.dem
+*.pt
+*.npy
+secrets*.json
+*.key
+*.pem

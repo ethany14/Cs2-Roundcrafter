@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>道具实验室 · CS2 Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="/mission.css"><link rel="stylesheet" href="/free-lab.css">
+<script src="/i18n-en.js"></script><script src="/i18n.js"></script>
+</head>
+<body>
+<header class="mc-top">
+  <a class="mc-brand" href="/demos"><b>CS</b>CS2 AGENT<span>MISSION CONTROL</span></a>
+  <nav class="mc-nav" aria-label="主导航">
+    <a href="/demos?view=matches"><i>01</i>比赛库</a>
+    <a href="/demos?view=review"><i>02</i>单回合复盘</a>
+    <a href="/demos?wbmode=multi"><i>03</i>多回合分析</a>
+    <a href="/demos?view=room"><i>04</i>战术室</a>
+    <a href="/demos?view=profile"><i>05</i>我的生涯</a>
+    <a href="/lab" aria-current="page"><i>06</i>道具实验室</a>
+  </nav>
+  <div class="mc-status"><span class="mc-led" aria-hidden="true"></span><span>本地计算 · 无外部调用</span><div class="mc-lang" data-lang-toggle aria-label="语言"></div></div>
+</header>
+<main class="lab">
+  <aside class="mc-panel lab-steps">
+    <div class="mc-head"><i>04</i>实验设置<span class="mc-aside">从站位到落点</span></div>
+    <div class="mc-body">
+      <section class="step"><h3><i>01</i>地图与投掷方式</h3>
+        <label class="field">地图<select id="map" aria-label="地图"></select></label>
+        <label class="field">投掷方式<select id="mode"><option value="auto_all">自动比较全部五种方式</option><option value="auto">快速比较 · 站立 / 原地跳投</option><option value="stand_left">仅站立左键</option><option value="jump_left">仅原地跳投左键</option><option value="w_jump_left">W 点按跳投（实验）</option><option value="crouch_jump_left">蹲稳跳投（实验）</option><option value="run_jump_left">助跑跳投（实验）</option></select></label>
+        <label class="field">助跑距离（游戏单位）<input id="runDistance" type="number" min="32" max="256" value="128"></label>
+      </section>
+      <section class="step"><h3><i>02</i>选点</h3>
+        <p class="mc-note">在地图上依次点击站位和落点，或直接输入坐标。</p>
+        <label class="field">站位 X, Y, Z<input id="origin" placeholder="点击地图设置脚下位置"></label>
+        <label class="field">目标 X, Y, Z<input id="target" placeholder="点击地图设置落点"></label>
+        <div class="row"><button id="apply">应用坐标</button></div>
+        <label class="field">选点表面 / 高度<select id="surface"><option>点击地图后选择实际地面</option></select></label>
+      </section>
+      <section class="step"><h3><i>03</i>约束</h3>
+        <div class="row two"><label class="field">落点容差（游戏单位）<input id="radius" type="number" min="8" max="160" value="64"></label><label class="field">计算时限（秒）<input id="seconds" type="number" min="2" max="90" value="60"></label></div>
+      </section>
+      <section class="step"><h3><i>04</i>计算</h3>
+        <button id="solve" class="mc-primary wide" disabled>计算瞄点</button>
+        <button id="cancel" class="wide" disabled>取消计算</button>
+        <p id="status" role="status" class="readout-box">正在加载地图…</p>
+      </section>
+      <details><summary>计算范围</summary><p class="mc-note">仅本地静态碰撞模型，自动全部方式最多 400 次模拟，快速模式 180 次；各方式共享总时限和次数。全部比较会继续尝试五种方式并汇总候选；快速比较仍在找到候选后停止。仅支持平地直线助跑，动态门尚不支持。跳投参数来自外部测量，本机尚未实投校准。2D 使用本地游戏雷达图，3D 使用碰撞几何。实验瞄点未经游戏内实投验证。</p><p class="mc-note">助跑方式从绿色起点出发，橙色点起跳；沿瞄准方向直线跑动。W 跳投只在起跳时点按 W。</p></details>
+      <details><summary>已保存布局</summary>
+        <label class="field">实验名称<input id="name" maxlength="80" placeholder="例如：自己的外场烟"></label>
+        <div class="row"><button id="save">保存布局</button><button id="load">读取布局</button></div>
+        <select id="saved" aria-label="已保存实验"><option value="">选择本机保存的布局</option></select>
+      </details>
+    </div>
+  </aside>
+
+  <section class="mc-panel lab-view">
+    <div class="viewbar">
+      <div class="mc-seg"><button id="view2" aria-pressed="true">2D 游戏雷达</button><button id="view3" aria-pressed="false">3D 地图</button></div>
+      <button id="reset">复位视角</button>
+      <span id="legend" class="legend"><i style="background:#82d68f"></i>站位 <i style="background:#69baff"></i>目标 <i style="background:#fa8fbb"></i>瞄点 <i style="background:#ffa34d"></i>起跳点</span>
+    </div>
+    <div id="viewport" class="mc-grid-bg" aria-label="地图选点区域"><div id="crosshair" hidden>+</div><div class="hint" id="hint">选择“放置站位”，然后点击地面；滚轮缩放。</div></div>
+    <div class="dock">
+      <div class="mc-seg"><button id="pickOrigin" aria-pressed="true">① 放置站位</button><button id="pickTarget" aria-pressed="false">② 放置落点</button><button id="navigate" aria-pressed="false">浏览 / 旋转</button></div>
+      <button id="undo">撤销选点</button>
+      <label class="field inline">显示层<select id="floor"><option value="all">全部</option><option value="upper">上层</option><option value="lower">下层</option><option value="custom">自定义高度</option></select></label>
+      <label class="field inline cut">隐藏此高度以上的几何<input id="cut" type="range" min="-2000" max="3000" value="3000"><output id="cutValue" class="readout"></output></label>
+    </div>
+  </section>
+
+  <aside class="mc-panel lab-results">
+    <div class="mc-head"><i>05</i>实验结果</div>
+    <div class="mc-body">
+      <label class="field">候选排序<select id="sortCandidates" aria-label="候选排序"><option value="difficulty">难度优先，再按误差</option><option value="error">误差优先，再按难度</option></select></label>
+      <label class="field">实验候选<select id="candidate" aria-label="实验候选"><option>等待计算</option></select></label>
+      <button id="aim" class="wide" disabled>查看瞄准视角</button>
+      <p id="detail" class="detail">自由选择站位和落点。切换 2D / 3D 会保留选点。</p>
+      <label class="field">轨迹回放<input id="timeline" type="range" min="0" max="100" value="100"></label>
+      <p id="aimNote" class="mc-note"></p>
+      <p id="modeSummary" class="mc-note"></p>
+      <label class="field">练习指令<textarea id="command" aria-label="实验定位指令" readonly placeholder="有合格实验候选后显示 setpos / setang"></textarea></label>
+      <button id="copy" class="wide" disabled>复制练习指令</button>
+      <div class="mc-hazard"></div>
+      <p class="warning">难度是操作复杂度的产品分级，不是实投成功率；落点误差是模型结果。</p>
+      <p class="warning">计算到达目标 ≠ 游戏内验证，也不证明烟雾封锁效果。未命中时不会生成可执行瞄点。</p>
+    </div>
+  </aside>
+</main>
+<script type="module" src="/free-lab.js"></script>
+</body>
+</html>
