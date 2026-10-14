@@ -69,10 +69,11 @@ The Agent does not answer from memory. Before it explains anything, RoundCrafter
 
 Retrieval is **hybrid vector search**:
 
-- **Text libraries** are embedded by the provider you choose under **Model → Embeddings** (OpenAI, Voyage AI, Gemini, Qwen, Zhipu, Mistral, Ollama or any OpenAI-compatible endpoint). Each query is embedded too, and results are ranked by cosine similarity blended with the keyword score. A Chinese query finds English sources and the other way round.
+- **Text libraries** are embedded by what you choose under **Model → Embeddings**: a **local model on your machine** (Multilingual MiniLM, Qwen3-Embedding 0.6B, multilingual-e5, BGE small zh or Potion, run on the CPU through fastembed), or a provider API (OpenAI, Voyage AI, Gemini, Qwen, Zhipu, Mistral, Ollama or any OpenAI-compatible endpoint). Each query is embedded too, and results are ranked by cosine similarity blended with the keyword score. A Chinese query finds English sources and the other way round.
 - **Pro rounds and the pro casebook** become numeric **situation vectors** (positions, timing, economy, routes, players alive), computed on your machine, and are searched by nearest neighbour.
 - **Hard filters run first** (map, side, site, phase, bomb state, grenade type), so similarity never overrides the game state.
-- **Tunable per model.** The Embeddings tab has a meaning-vs-keywords **blend** (default 65 / 35) and a **similarity floor** for results found by meaning alone. The floor calibrates itself to each model: the 95th percentile of the model's scores on random pairs of library texts, because every model has its own baseline for unrelated text. Either can be set by hand.
+- **Tunable per model.** The Embeddings tab has a meaning-vs-keywords **blend** (default 65 / 35) and a **similarity floor** for results found by meaning alone. The floor calibrates itself to each model: 12 off-topic probe queries are compared with your library, and the floor is the 75th percentile of their best match, because every model has its own baseline for unrelated text. Either can be set by hand.
+- **Measured, not assumed.** `experiments/retrieval/eval_embeddings.py` scores any model on a bilingual CS2 benchmark (keyword vs vector vs hybrid, per language, floor behaviour). Results and findings: [`outputs/retrieval/embedding-quality.md`](outputs/retrieval/embedding-quality.md).
 - **Vectors are cached** in `data/vectors/index.sqlite` by model and text hash, so each text is embedded once per model. Without an embedding model, or if the provider fails, retrieval falls back to keyword ranking and says so in its result.
 
 | Library | What it holds | How it is matched | Used by |
@@ -151,7 +152,7 @@ flowchart LR
 - **Your keys stay yours.** You enter the Steam Web API key and the model API key in the app. They are stored in `data/account/` on your machine and never sent back by the API.
 - **No silent model calls.** The LLM runs only when you click, and each run has a call budget.
 - **No silent web access.** Lineup research reads public pages and videos only when you start it, with fixed search and read budgets.
-- **You choose what gets embedded.** Library text and search queries go to the embedding provider you set up; situation vectors for pro rounds and the casebook are computed locally and never sent.
+- **You choose what gets embedded.** With a local embedding model nothing leaves your machine. With a provider API, library text and search queries go to that provider. Situation vectors for pro rounds and the casebook are always computed locally.
 - **Honest outputs.** Model results are labelled, inferences are kept apart from observed facts, and the validation reports in `outputs/` include the failures.
 
 ## Quick start
@@ -163,7 +164,7 @@ flowchart LR
 | Node | ≥ 22 |
 | CS2 install | radar images and icons |
 | Model API key | optional, set in the app |
-| Embedding API key | optional, for vector retrieval |
+| Embeddings | optional: a local model, or an API key |
 
 ```powershell
 python -m venv .venv
@@ -175,7 +176,7 @@ npm install --prefix outputs/cs2-coach-prototype   # demo parser
 Then open **http://127.0.0.1:8790**, upload a `.dem` or link Steam, and open the match.
 
 - **Turn on the Agent:** click **Model** in the top bar, pick a provider, paste your API key and press **Test connection**. `.env` still works as a fallback (see `.env.example`).
-- **Turn on vector retrieval:** in the same dialog open **Embeddings**, pick an embedding provider (Claude users: Voyage AI is Anthropic's recommended partner) and press **Rebuild index**. Without it, retrieval uses keyword ranking.
+- **Turn on vector retrieval:** in the same dialog open **Embeddings**, pick **Local model** (run `pip install -e ".[local-embeddings]"` once; the model downloads on first use) or an embedding provider (Claude users: Voyage AI is Anthropic's recommended partner), then press **Rebuild index**. Without it, retrieval uses keyword ranking.
 - **Weapon icons** are imported from your CS2 install with `experiments/import-icons.ps1`.
 - **Movement prediction (optional):** `pip install -r requirements-training.txt` for PyTorch, plus the trained checkpoints in `outputs/movement/comparison/`. These are local artifacts, not stored in git.
 
@@ -266,10 +267,11 @@ Agent 不凭记忆回答。解读之前，RoundCrafter 会先从自己的资料�
 
 检索采用**混合向量搜索**：
 
-- **文本资料库**由你在**模型 → 向量嵌入**中选择的服务商生成向量（OpenAI、Voyage AI、Gemini、通义千问、智谱、Mistral、Ollama，或任何兼容 OpenAI 的接口）。查询也会转成向量，按余弦相似度与关键词得分混合排序。中文查询可以找到英文资料，反之亦然。
+- **文本资料库**由你在**模型 → 向量嵌入**中选择的方式生成向量：**本机运行的本地模型**（Multilingual MiniLM、Qwen3-Embedding 0.6B、multilingual-e5、BGE small zh 或 Potion，通过 fastembed 在 CPU 上运行），或服务商 API（OpenAI、Voyage AI、Gemini、通义千问、智谱、Mistral、Ollama，或任何兼容 OpenAI 的接口）。查询也会转成向量，按余弦相似度与关键词得分混合排序。中文查询可以找到英文资料，反之亦然。
 - **职业回合与职业案例库**转成数值**情境向量**（站位、时间、经济、路线、存活人数），在本机计算，按最近邻检索。
 - **先执行硬过滤**（地图、阵营、包点、阶段、下包状态、道具类型），相似度永远不会越过对局状态。
-- **可按模型调节。** 向量嵌入页可以调整语义与关键词的**混合权重**（默认 65 / 35），以及只靠语义命中时的**相似度下限**。下限会按每个模型自动校准：取该模型对资料库中随机文本对打分的 95 分位，因为每个模型对无关文本的基线分都不同。两项都可以手动设置。
+- **可按模型调节。** 向量嵌入页可以调整语义与关键词的**混合权重**（默认 65 / 35），以及只靠语义命中时的**相似度下限**。下限会按每个模型自动校准：用 12 条无关的探测查询与资料库比对，取它们最佳匹配分数的 75 分位，因为每个模型对无关文本的基线分都不同。两项都可以手动设置。
+- **用数据验证。** `experiments/retrieval/eval_embeddings.py` 可以在中英双语 CS2 基准上评测任意模型（关键词、向量、混合排序，分语言统计，以及下限表现）。结果与结论见 [`outputs/retrieval/embedding-quality.md`](outputs/retrieval/embedding-quality.md)。
 - **向量本地缓存**在 `data/vectors/index.sqlite`，按模型和文本哈希存储，同一模型下每段文本只生成一次。未配置向量模型或服务商出错时，检索退回关键词排序，并在结果中注明。
 
 | 资料库 | 内容 | 匹配方式 | 用在哪里 |
@@ -333,7 +335,7 @@ Agent 不凭记忆回答。解读之前，RoundCrafter 会先从自己的资料�
 - **密钥留在本机：** Steam API Key 和模型 API Key 都在应用中填写，保存在本机 `data/account/`，接口不会返回它们。
 - **不偷偷调用模型：** 只有点击后才调用 LLM，每次都有调用上限。
 - **不偷偷联网：** 投掷点研究只在你启动后读取公开网页和视频，搜索与阅读次数都有上限。
-- **向量化内容由你决定：** 资料库文本和检索查询只发给你设置的向量服务商；职业回合和案例库的情境向量在本机计算，不会发送。
+- **向量化内容由你决定：** 使用本地向量模型时，任何内容都不会离开本机；使用服务商 API 时，资料库文本和检索查询会发给该服务商。职业回合和案例库的情境向量始终在本机计算。
 - **结果诚实：** 模型输出明确标注，推断与观测事实分开，`outputs/` 中的验证报告包含失败案例。
 
 ### 快速开始
@@ -345,7 +347,7 @@ Agent 不凭记忆回答。解读之前，RoundCrafter 会先从自己的资料�
 | Node | ≥ 22 |
 | 本机 CS2 | 雷达图与图标 |
 | 模型 API Key | 可选，在应用内设置 |
-| 向量 API Key | 可选，用于向量检索 |
+| 向量嵌入 | 可选：本地模型或 API Key |
 
 ```powershell
 python -m venv .venv
@@ -357,7 +359,7 @@ npm install --prefix outputs/cs2-coach-prototype   # demo 解析器
 然后打开 **http://127.0.0.1:8790**，上传 `.dem` 或绑定 Steam，打开比赛即可。
 
 - **启用 Agent：** 点击顶栏的**模型**按钮，选择服务商，粘贴 API Key 并点击**测试连接**。`.env` 仍可作为备用（参考 `.env.example`）。
-- **启用向量检索：** 在同一窗口打开**向量嵌入**，选择向量服务商（使用 Claude 的话，Voyage AI 是 Anthropic 推荐的合作方），然后点击**重建索引**。未设置时检索使用关键词排序。
+- **启用向量检索：** 在同一窗口打开**向量嵌入**，选择**本地模型**（先运行一次 `pip install -e ".[local-embeddings]"`，首次使用时自动下载模型）或向量服务商（使用 Claude 的话，Voyage AI 是 Anthropic 推荐的合作方），然后点击**重建索引**。未设置时检索使用关键词排序。
 - **武器图标**通过 `experiments/import-icons.ps1` 从本机 CS2 导入。
 - **移动预测（可选）：** 运行 `pip install -r requirements-training.txt` 安装 PyTorch，并准备 `outputs/movement/comparison/` 下的模型权重。这些是本地产物，不在 git 中。
 

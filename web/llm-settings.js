@@ -88,7 +88,7 @@ async function refresh(){state=await api('/api/llm/settings');paintButton();retu
 
 function providerGrid(providers,label,onPick){
   const grid=el('div',{class:'llm-providers',role:'group','aria-label':label});
-  for(const p of providers){const b=el('button',{type:'button','data-id':p.id,'aria-pressed':'false'},p.label);b.onclick=()=>onPick(p);grid.append(b)}
+  for(const p of providers){const b=el('button',{type:'button','data-id':p.id,'aria-pressed':'false'},T(p.label));b.onclick=()=>onPick(p);grid.append(b)}
   grid.select=id=>{for(const b of grid.children)b.setAttribute('aria-pressed',String(b.dataset.id===id))};return grid}
 function keyField(id){
   const key=el('input',{id,type:'password',spellcheck:'false',autocomplete:'off'});
@@ -123,7 +123,7 @@ function chatPanel(){
     keyHint.replaceChildren(p.protocol==='anthropic'?T('通过 Anthropic 官方 SDK 连接。'):T('通过 OpenAI 兼容接口连接。'),' ',keyLink);
     effort.value=keepValues&&same?saved.effort||'':'';
   }
-  const form=()=>({provider:current.id,base_url:url.value.trim(),model:model.value.trim(),api_key:key.value.trim(),effort:effort.value});
+  const form=()=>({provider:current.id,base_url:current.local?'':url.value.trim(),model:current.local?localSel.value:model.value.trim(),api_key:key.value.trim(),effort:effort.value});
   const load=el('button',{type:'button',class:'llm-act'},T('加载模型列表'));
   load.onclick=busy(status,async()=>{status.set(T('正在向服务商请求模型列表…'));const r=await api('/api/llm/models',form());
     list.replaceChildren(...r.models.map(m=>el('option',{value:m})));status.set(T('已加载 {0} 个模型；在模型框中输入或选择',[r.models.length]),'ok')});
@@ -161,6 +161,20 @@ function embedPanel(es){
   const keyLink=el('a',{target:'_blank',rel:'noopener'},T('获取 API Key ↗'));
   const urlNote=el('div',{class:'llm-hint'}),keyHint=el('div',{class:'llm-hint'});
   const index=el('div',{class:'llm-index'});
+  // Local model: a menu with download sizes instead of model ID / key / endpoint fields.
+  const runtime=es.local_runtime||{installed:false,downloaded:[]};
+  const localSel=el('select',{id:'embLocal'});
+  const localInfo=el('div',{class:'llm-hint'});
+  const paintLocal=()=>{const m=(current.local_models||[]).find(x=>x.id===localSel.value);if(!m)return;
+    const have=runtime.downloaded.includes(m.id);
+    localInfo.textContent=T(m.note)+' · '+m.dim+T(' 维')+' · '+(have?T('已下载'):T('首次使用下载约 {0} GB',[m.size_gb]))+
+      (runtime.installed?'':' · '+T('需要先安装：pip install -e ".[local-embeddings]"'))};
+  localSel.onchange=paintLocal;
+  const privacy=el('div',{class:'llm-privacy'});
+  const paintPrivacy=local=>privacy.replaceChildren(...(local
+    ?[T('本地模型：资料库文本和查询都不会离开本机。首次使用时从 Hugging Face 下载模型到'),' ',el('code',{},'data/models/'),T('。')]
+    :[T('检索时，资料库文本和查询会发送给向量服务商；职业回合与职业案例库的情境向量在本机计算，不会发送。向量缓存在'),' ',el('code',{},'data/vectors/'),T('。')]));
+  const remote=[];
   // Tuning: blank / untouched means "use the default or the model's calibration".
   const tune=es.tuning||{alpha:.65,floor:.4,floor_source:'default',defaults:{alpha:.65,floor:.4}};
   let alphaTouched=saved?.alpha!=null;
@@ -186,6 +200,10 @@ function embedPanel(es){
     model.value=keepValues&&same?saved.model:(p.models[0]||'');
     list.replaceChildren(...p.models.map(m=>el('option',{value:m})));
     dims.value=keepValues&&same&&saved.dimensions?saved.dimensions:'';dims.disabled=!p.dimensions;
+    const local=!!p.local;for(const x of remote)x.hidden=local;localSel.parentElement.hidden=!local;model.parentElement.hidden=local;
+    if(local){localSel.replaceChildren(...p.local_models.map(m=>el('option',{value:m.id},m.label+' · '+m.size_gb+' GB')));
+      localSel.value=keepValues&&same?saved.model:p.local_models[0].id;paintLocal()}
+    paintPrivacy(local);
     const chatSame=state?.saved?.provider===p.id&&state.saved.has_key;
     key.value='';key.placeholder=same&&saved.has_key?T('已保存')+' '+(saved.key_hint||'')+T('（留空不修改）'):chatSame?T('留空则使用对话模型的同一密钥'):(p.key_optional?T('本地服务可留空'):T('粘贴 API Key'));
     if(p.key_url){keyLink.href=p.key_url;keyLink.hidden=false}else keyLink.hidden=true;
@@ -195,7 +213,9 @@ function embedPanel(es){
   const form=()=>({provider:current.id,base_url:url.value.trim(),model:model.value.trim(),api_key:key.value.trim(),dimensions:dims.disabled?'':dims.value,
     alpha:alphaTouched?Number(alpha.value)/100:'',min_similarity:floor.value.trim()});
   const test=el('button',{type:'button',class:'llm-act'},T('测试连接'));
-  test.onclick=busy(status,async()=>{status.set(T('正在测试…'));const r=await api('/api/embedding/test',form());
+  test.onclick=busy(status,async()=>{const m=current.local&&current.local_models.find(x=>x.id===localSel.value);
+    status.set(m&&!runtime.downloaded.includes(m.id)?T('正在下载并加载本地模型（约 {0} GB），可能需要几分钟…',[m.size_gb]):T('正在测试…'));
+    const r=await api('/api/embedding/test',form());if(m&&!runtime.downloaded.includes(m.id)){runtime.downloaded.push(m.id);paintLocal()}
     status.set(T('连接成功 · {0} · {1} 维 · {2} ms · 中英同义句相似度 {3}',[r.model,r.dimensions,r.latency_ms,r.cross_language_similarity]),'ok')});
   const rebuild=el('button',{type:'button',class:'llm-act'},T('重建索引'));rebuild.hidden=!es.configured;
   rebuild.onclick=busy(status,async()=>{status.set(T('正在为资料库生成向量…'));const r=await api('/api/embedding/rebuild',{});
@@ -211,16 +231,18 @@ function embedPanel(es){
       el('div',{class:'llm-hint'},T('向量嵌入用于检索：资料库和查询先转成向量，再按语义相似度与关键词混合排序，中英文可以互相匹配。未配置时使用关键词排序。')),
       el('div',{},el('span',{class:'llm-label'},T('服务商')),grid),
       el('div',{class:'llm-two'},
-        el('div',{},el('label',{class:'llm-label',for:'embModel'},T('模型')),model,list,el('div',{class:'llm-hint'},T('换模型后需要重新生成向量；旧向量会保留，切回时可直接复用。'))),
-        el('div',{},el('label',{class:'llm-label',for:'embDims'},T('向量维度')),dims,el('div',{class:'llm-hint'},T('仅 OpenAI 支持自定义维度')))),
-      el('div',{},el('label',{class:'llm-label',for:'embKey'},'API Key'),row,keyHint),
-      el('div',{},el('label',{class:'llm-label',for:'embBaseUrl'},T('接口地址')),url,urlNote),
+        el('div',{},el('div',{},el('label',{class:'llm-label',for:'embModel'},T('模型')),model,list),
+          el('div',{},el('label',{class:'llm-label',for:'embLocal'},T('本地模型')),localSel,localInfo),
+          el('div',{class:'llm-hint'},T('换模型后需要重新生成向量；旧向量会保留，切回时可直接复用。'))),
+        remote[remote.push(el('div',{},el('label',{class:'llm-label',for:'embDims'},T('向量维度')),dims,el('div',{class:'llm-hint'},T('仅 OpenAI 支持自定义维度'))))-1]),
+      remote[remote.push(el('div',{},el('label',{class:'llm-label',for:'embKey'},'API Key'),row,keyHint))-1],
+      remote[remote.push(el('div',{},el('label',{class:'llm-label',for:'embBaseUrl'},T('接口地址')),url,urlNote))-1],
       el('div',{class:'llm-two'},
         el('div',{},el('label',{class:'llm-label',for:'embAlpha'},T('混合权重')),alpha,alphaOut,el('div',{class:'llm-hint'},T('越靠右越看重语义，越靠左越看重字面关键词。'))),
         el('div',{},el('label',{class:'llm-label',for:'embFloor'},T('相似度下限')),floor,floorHint,el('div',{class:'llm-reset'},reset))),
       el('div',{},el('span',{class:'llm-label'},T('向量索引')),index),
       status,
-      el('div',{class:'llm-privacy'},T('检索时，资料库文本和查询会发送给向量服务商；职业回合与职业案例库的情境向量在本机计算，不会发送。向量缓存在'),' ',el('code',{},'data/vectors/'),T('。'))),
+      privacy),
     el('footer',{},clear,el('div',{},test,rebuild,save)));
   pick(current,true);return panel}
 

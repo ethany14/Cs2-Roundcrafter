@@ -377,7 +377,7 @@ footer a:hover{color:var(--amber)}
         </div>
         <div class="rag-flow">
           <div><div class="t">STEP 1</div><b><span class="en">Filter</span><span class="zh">硬过滤</span></b><span><span class="en">Map, side, site, phase, bomb state, grenade type.</span><span class="zh">地图、阵营、包点、阶段、下包状态、道具类型。</span></span></div>
-          <div><div class="t">STEP 2</div><b><span class="en">Embed</span><span class="zh">向量化</span></b><span><span class="en">Text by your embedding provider; situations as numeric vectors on your machine.</span><span class="zh">文本由你选择的向量服务商生成；对局情境在本机转成数值向量。</span></span></div>
+          <div><div class="t">STEP 2</div><b><span class="en">Embed</span><span class="zh">向量化</span></b><span><span class="en">Text by a local model on your machine or an embedding API; situations as numeric vectors, always local.</span><span class="zh">文本由本机的本地模型或向量 API 生成；对局情境始终在本机转成数值向量。</span></span></div>
           <div><div class="t">STEP 3</div><b><span class="en">Rank</span><span class="zh">混合排序</span></b><span><span class="en">Cosine similarity blended with keyword score; nearest neighbours for situations.</span><span class="zh">余弦相似度与关键词得分混合；情境按最近邻排序。</span></span></div>
           <div><div class="t">STEP 4</div><b><span class="en">Cite</span><span class="zh">引用</span></b><span><span class="en">Results enter the evidence packet; findings must cite their IDs.</span><span class="zh">结果进入证据包，结论必须引用它们的编号。</span></span></div>
         </div>
@@ -514,7 +514,7 @@ footer a:hover{color:var(--amber)}
       </div>
       <div class="side">
         <span><b>+</b> <span class="en">Movement GRU · experimental</span><span class="zh">移动预测 GRU · 实验性</span></span>
-        <span><b>+</b> <span class="en">Hybrid vector retrieval · your embedding provider</span><span class="zh">混合向量检索 · 你选择的向量服务商</span></span>
+        <span><b>+</b> <span class="en">Hybrid vector retrieval · local model or embedding API</span><span class="zh">混合向量检索 · 本地模型或向量 API</span></span>
         <span><b>+</b> <span class="en">Map collision and radar from your CS2 install</span><span class="zh">地图碰撞与雷达图来自本机 CS2</span></span>
         <span><b>⇢</b> <span class="en">LLM Agent · evidence packet in, audited findings out</span><span class="zh">LLM Agent · 输入证据包，输出经审核的发现</span></span>
       </div>

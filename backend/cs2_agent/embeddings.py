@@ -1,11 +1,12 @@
-"""Vector embeddings for retrieval, computed by a provider's embeddings API.
+"""Vector embeddings for retrieval, computed by a local model on this machine or by a provider's embeddings API.
 
 Settings live in data/account/embedding.json (the key is never returned to the browser). Vectors are cached
 in data/vectors/index.sqlite, keyed by model and text hash, so each text is embedded once per model.
 Retrieval is hybrid: hard filters first, then cosine similarity blended with the existing keyword score.
 When no embedding model is configured, or the provider fails, callers keep their keyword ranking and say so.
 
-What leaves the machine: the library texts (tactic cards, reviewed notes, your case library, lineup and
+With the local model nothing leaves the machine (after a one-time model download from Hugging Face).
+With a provider API, what leaves the machine is: the library texts (tactic cards, reviewed notes, your case library, lineup and
 learning cards) and the search queries, sent to the embedding provider you chose. Situation vectors for
 pro rounds and the casebook are numeric and computed locally (casebook.py, demo_compare.py).
 """
@@ -20,7 +21,26 @@ def settings_path(root):return Path(root)/'data/account/embedding.json'
 def index_path(root):return Path(root)/'data/vectors/index.sqlite'
 
 # Suggested models only; any model ID the provider accepts works. batch = max inputs per request.
+# Local models run through fastembed (ONNX on the CPU, no PyTorch). Some models expect prefixes; fastembed
+# does not add them, so they are applied here. Sizes are the one-time download.
+LOCAL_MODELS=[
+ {'id':'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2','label':'Multilingual MiniLM','size_gb':0.22,'dim':384,
+  'note':'小而快，支持 50 多种语言，推荐默认。'},
+ {'id':'BAAI/bge-small-zh-v1.5','label':'BGE small zh','size_gb':0.09,'dim':512,'query_prefix':'为这个句子生成表示以用于检索相关文章：',
+  'note':'最小；以中文为主，纯英文文本较弱。'},
+ {'id':'Qwen/Qwen3-Embedding-0.6B-Q','label':'Qwen3 Embedding 0.6B (quantized)','size_gb':1.12,'dim':1024,
+  'query_prefix':'Instruct: Given a Counter-Strike 2 tactics question, retrieve notes that answer it\nQuery:',
+  'note':'质量最好，多语言；CPU 上较慢。'},
+ {'id':'intfloat/multilingual-e5-large','label':'Multilingual E5 large','size_gb':2.24,'dim':1024,'query_prefix':'query: ','doc_prefix':'passage: ',
+  'note':'多语言能力强；下载较大。'},
+ {'id':'minishlab/potion-multilingual-128M','label':'Potion multilingual (static)','size_gb':0.51,'dim':256,
+  'note':'静态向量；最快，质量较低。'},
+]
+LOCAL_BY_ID={m['id']:m for m in LOCAL_MODELS}
+
 PROVIDERS=[
+ {'id':'local','label':'本地模型（本机运行）','base_url':'','models':[m['id'] for m in LOCAL_MODELS],'local':True,'key_optional':True,'batch':32,
+  'local_models':LOCAL_MODELS},
  {'id':'openai','label':'OpenAI','base_url':'https://api.openai.com/v1','models':['text-embedding-3-small','text-embedding-3-large'],'dimensions':True,'batch':64},
  {'id':'voyage','label':'Voyage AI','base_url':'https://api.voyageai.com/v1','models':['voyage-3.5','voyage-3.5-lite'],'input_type':True,'batch':64,
   'key_url':'https://dash.voyageai.com/','note':"Anthropic's recommended embeddings provider (Claude has no embeddings API)."},
@@ -37,9 +57,15 @@ MAX_CHARS=4000        # per text sent to the provider
 MAX_NEW_PER_CALL=2000 # texts embedded by one retrieval or rebuild
 ALPHA=0.65            # default weight of cosine similarity in the hybrid score (user-adjustable)
 MIN_SIMILARITY=0.40   # floor used until a model is calibrated (user can override)
-# Calibration: each model has its own baseline for unrelated texts, so the floor for a vector-only hit is set
-# from the model's own scores: the 95th percentile of similarity between random pairs of library texts.
-CALIBRATION_PERCENTILE=95
+# Calibration: each model has its own baseline for unrelated text, so the floor for a vector-only hit comes from
+# the model's own scores. Off-topic probe queries (embedded as queries, like real searches) are compared with the
+# library; the floor is a high percentile of their best-match scores, i.e. what an unrelated query still reaches.
+# Note-to-note similarity is not used: notes in one domain resemble each other far more than a query resembles
+# a note, which put the floor above most correct matches (see outputs/retrieval/embedding-quality.md).
+PROBE_QUERIES=['what graphics card do I need for 300 fps','how to change my steam profile picture','refund a game on steam',
+  'best gaming headset under 100 dollars','how to stream with OBS on twitch','is my internet ping too high to play',
+  '240Hz 显示器值得买吗','怎么改 Steam 名字','游戏闪退怎么修复','鼠标垫选什么材质','怎么开直播','网络延迟高怎么办']
+CALIBRATION_PERCENTILE=75
 CALIBRATION_MIN_VECTORS=20
 FLOOR_RANGE=(0.15,0.90)
 LOCK=threading.RLock()
@@ -64,9 +90,12 @@ def validate(raw,previous=None,root=None):
     if not isinstance(raw,dict):raise ValueError('无效设置')
     p=BY_ID.get(raw.get('provider'))
     if not p:raise ValueError('未知的服务商')
-    url=check_url(raw.get('base_url') or p['base_url'])
     model=str(raw.get('model') or '').strip()
     if not re.fullmatch(r'[\w.:/@+-]{1,120}',model):raise ValueError('请填写模型 ID')
+    if p.get('local'):
+        if model not in LOCAL_BY_ID:raise ValueError('请选择列表中的本地模型')
+        url=''
+    else:url=check_url(raw.get('base_url') or p['base_url'])
     dims=raw.get('dimensions')
     if dims in ('',None):dims=None
     else:
@@ -76,7 +105,8 @@ def validate(raw,previous=None,root=None):
     key=str(raw.get('api_key') or '').strip()
     if not key and previous and previous.get('provider')==p['id']:key=previous.get('api_key','')
     if key and (len(key)>400 or re.search(r'\s',key)):raise ValueError('API Key 格式不正确')
-    if not key and not (p.get('key_optional') or is_local(url) or _chat_key(root,p['id'])):raise ValueError('请填写 API Key')
+    if p.get('local'):key=''
+    elif not key and not (p.get('key_optional') or is_local(url) or _chat_key(root,p['id'])):raise ValueError('请填写 API Key')
     def fraction(name,low,high,message):
         v=raw.get(name)
         if v in ('',None):return None
@@ -95,7 +125,8 @@ def config(root=None,saved=None):
     p=BY_ID.get(s['provider'],BY_ID['custom'])
     key=s.get('api_key') or _chat_key(root,s['provider'])
     model_key=hashlib.sha256(f"{s['provider']}|{s['base_url']}|{s['model']}|{s.get('dimensions')}".encode()).hexdigest()[:24]
-    return {**s,'api_key':key,'batch':p['batch'],'input_type':p.get('input_type',False),'send_dimensions':p.get('dimensions',False),'model_key':model_key}
+    return {**s,'api_key':key,'batch':p['batch'],'input_type':p.get('input_type',False),'send_dimensions':p.get('dimensions',False),'model_key':model_key,
+            'local':bool(p.get('local')),'root':str(root)}
 
 def save(root,raw):
     clean=validate(raw,load(root),root);clean['updated']=time.time()
@@ -113,12 +144,48 @@ def public(root):
                 'has_key':bool(s.get('api_key')),'key_hint':('…'+s['api_key'][-4:]) if len(s.get('api_key',''))>=8 else '',
                 'reuses_chat_key':not s.get('api_key') and bool(c and c['api_key']),
                 'alpha':s.get('alpha'),'min_similarity':s.get('min_similarity')},
-            'configured':bool(c),'index':index_status(root,c),'tuning':tuning(root,c)}
+            'configured':bool(c),'index':index_status(root,c),'tuning':tuning(root,c),'local_runtime':local_runtime(root)}
 
 # ---------------------------------------------------------------- provider calls
+# ---------------------------------------------------------------- local model
+LOCAL={}   # model id -> loaded fastembed model, shared by all requests
+
+def models_dir(root):return Path(root)/'data/models/fastembed'
+
+def local_runtime(root=None):
+    """Whether fastembed is installed and which local models are already downloaded."""
+    try:import fastembed
+    except ImportError:return {'installed':False,'downloaded':[]}
+    folder=models_dir(_root(root))
+    names={p.name for p in folder.iterdir()} if folder.exists() else set()
+    downloaded=[m['id'] for m in LOCAL_MODELS if any(m['id'].split('/')[-1].lower().removesuffix('-q') in n.lower() for n in names)]
+    return {'installed':True,'version':fastembed.__version__,'downloaded':downloaded,'folder':'data/models/fastembed'}
+
+def local_model(model_id,root=None):
+    with LOCK:
+        if model_id not in LOCAL:
+            try:from fastembed import TextEmbedding
+            except ImportError:raise RuntimeError('本地向量模型需要 fastembed：pip install -e ".[local-embeddings]"') from None
+            folder=models_dir(_root(root));folder.mkdir(parents=True,exist_ok=True)
+            try:LOCAL[model_id]=TextEmbedding(model_name=model_id,cache_dir=str(folder))
+            except Exception as e:raise RuntimeError('本地模型加载失败：'+type(e).__name__) from None
+        return LOCAL[model_id]
+
+def local_embed(texts,cfg,kind):
+    spec=LOCAL_BY_ID.get(cfg['model'],{})
+    prefix=spec.get('query_prefix','') if kind=='query' else spec.get('doc_prefix','')
+    model=local_model(cfg['model'],cfg.get('root'))
+    try:return np.asarray(list(model.embed([prefix+(t[:MAX_CHARS] or ' ') for t in texts],batch_size=cfg['batch'])),dtype=np.float32)
+    except Exception as e:raise RuntimeError('本地模型运行失败：'+type(e).__name__) from None
+
+def _unit(m):
+    norms=np.linalg.norm(m,axis=1,keepdims=True);norms[norms==0]=1
+    return m/norms
+
 def embed_texts(texts,cfg,kind='document',*,transport=None):
     """Embed a list of texts; returns an (n, dim) float32 array of unit vectors."""
     if not texts:return np.zeros((0,0),dtype=np.float32)
+    if cfg.get('local'):return _unit(local_embed(texts,cfg,kind))
     headers={'Content-Type':'application/json'}
     if cfg['api_key']:headers['Authorization']='Bearer '+cfg['api_key']
     rows=[]
@@ -147,6 +214,8 @@ def _db(root):
     db.execute('CREATE TABLE IF NOT EXISTS vectors(model_key TEXT,text_hash TEXT,dim INTEGER,vector BLOB,PRIMARY KEY(model_key,text_hash))')
     db.execute('CREATE TABLE IF NOT EXISTS libraries(library TEXT,model_key TEXT,items INTEGER,updated REAL,PRIMARY KEY(library,model_key))')
     db.execute('CREATE TABLE IF NOT EXISTS calibration(model_key TEXT PRIMARY KEY,floor REAL,pairs INTEGER,vectors INTEGER,updated REAL)')
+    try:db.execute("ALTER TABLE vectors ADD COLUMN kind TEXT DEFAULT 'document'")
+    except sqlite3.OperationalError:pass  # column already there
     return db
 
 def vectors(texts,cfg,root=None,kind='document',*,transport=None,library=None):
@@ -163,7 +232,7 @@ def vectors(texts,cfg,root=None,kind='document',*,transport=None,library=None):
         if len(missing)>MAX_NEW_PER_CALL:raise RuntimeError('需要嵌入的文本过多，请先在模型设置中重建向量索引')
         if missing:
             new=embed_texts([t for _,t in missing],cfg,kind,transport=transport)
-            db.executemany('INSERT OR REPLACE INTO vectors VALUES(?,?,?,?)',[(cfg['model_key'],h,int(v.shape[0]),v.astype(np.float32).tobytes()) for (h,_),v in zip(missing,new)])
+            db.executemany('INSERT OR REPLACE INTO vectors(model_key,text_hash,dim,vector,kind) VALUES(?,?,?,?,?)',[(cfg['model_key'],h,int(v.shape[0]),v.astype(np.float32).tobytes(),kind) for (h,_),v in zip(missing,new)])
             for (h,_),v in zip(missing,new):found[h]=v
         if library:db.execute('INSERT OR REPLACE INTO libraries VALUES(?,?,?,?)',(library,cfg['model_key'],len(set(hashes)),time.time()))
     dims={v.shape[0] for v in found.values()}
@@ -252,19 +321,24 @@ def rebuild(root=None,*,transport=None):
 
 
 # ---------------------------------------------------------------- tuning
-def calibrate(root=None,cfg=None,*,seed=0):
-    """Set this model's floor from its own scores on unrelated texts (random pairs of library vectors)."""
+def floor_from(doc_vectors,probe_vectors,percentile=None):
+    """Floor = a high percentile of the best similarity that each off-topic probe query reaches in the library."""
+    top=(probe_vectors@doc_vectors.T).max(axis=1)
+    return float(np.clip(np.percentile(top,CALIBRATION_PERCENTILE if percentile is None else percentile),*FLOOR_RANGE))
+
+def calibrate(root=None,cfg=None,*,transport=None):
+    """Set this model's floor from its own scores: off-topic probe queries against the library's notes."""
     root=_root(root);cfg=cfg or config(root)
     if not cfg:return None
     with LOCK,_db(root) as db:
-        rows=db.execute('SELECT dim,vector FROM vectors WHERE model_key=?',(cfg['model_key'],)).fetchall()
-        if len(rows)<CALIBRATION_MIN_VECTORS:return None
-        m=np.stack([np.frombuffer(b,dtype=np.float32,count=d) for d,b in rows])
-        rng=np.random.default_rng(seed);n=len(m);pairs=min(4000,n*(n-1)//2)
-        i=rng.integers(0,n,pairs);j=rng.integers(0,n,pairs);keep=i!=j
-        sims=np.einsum('ij,ij->i',m[i[keep]],m[j[keep]])
-        floor=float(np.clip(np.percentile(sims,CALIBRATION_PERCENTILE),*FLOOR_RANGE))
-        db.execute('INSERT OR REPLACE INTO calibration VALUES(?,?,?,?,?)',(cfg['model_key'],round(floor,4),int(keep.sum()),n,time.time()))
+        rows=db.execute("SELECT dim,vector FROM vectors WHERE model_key=? AND kind='document'",(cfg['model_key'],)).fetchall()
+    if len(rows)<CALIBRATION_MIN_VECTORS:return None
+    docs=np.stack([np.frombuffer(b,dtype=np.float32,count=d) for d,b in rows])
+    try:probes=vectors(PROBE_QUERIES,cfg,root,'query',transport=transport)
+    except RuntimeError:return None
+    floor=floor_from(docs,probes)
+    with LOCK,_db(root) as db:
+        db.execute('INSERT OR REPLACE INTO calibration VALUES(?,?,?,?,?)',(cfg['model_key'],round(floor,4),len(PROBE_QUERIES)*len(docs),len(docs),time.time()))
     return floor
 
 def tuning(root=None,cfg=None):

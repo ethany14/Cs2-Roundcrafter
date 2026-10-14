@@ -227,3 +227,51 @@ def test_blend_and_floor_are_adjustable_and_floor_calibrates_per_model(home, mon
         configure(root, alpha=1.5)
     # Clearing the fields goes back to auto.
     assert configure(root, alpha="", min_similarity="")["tuning"]["floor_source"] == "calibrated"
+
+
+class FakeLocalModel:
+    """Stands in for a fastembed model: records what it was asked to embed."""
+    def __init__(self):
+        self.seen = []
+
+    def embed(self, texts, batch_size=32):
+        texts = list(texts)
+        self.seen.extend(texts)
+        return [np.array(toy_vector(t), dtype=np.float32) * 3 for t in texts]
+
+
+def test_local_model_needs_no_key_applies_prefixes_and_sends_nothing(home, monkeypatch):
+    root, provider = home
+    with pytest.raises(ValueError):
+        emb.save(root, {"provider": "local", "model": "not/a-listed-model"})
+    state = emb.save(root, {"provider": "local", "model": "intfloat/multilingual-e5-large", "api_key": "ignored"})
+    assert state["configured"] and not state["saved"]["has_key"]
+    fake = FakeLocalModel()
+    monkeypatch.setitem(emb.LOCAL, "intfloat/multilingual-e5-large", fake)
+    sims, info = emb.semantic("lib", ["retake through tunnels", "smoke mid"], "回防")
+    assert info["vector"] == "on" and sims[0] > sims[1]
+    assert fake.seen[:2] == ["passage: retake through tunnels", "passage: smoke mid"] and fake.seen[2] == "query: 回防"
+    assert provider.requests == []  # nothing went over the network
+    vectors = emb.embed_texts(["smoke"], emb.config(root))
+    assert np.allclose(np.linalg.norm(vectors, axis=1), 1)  # normalised even if the model is not
+
+
+def test_local_model_without_fastembed_explains_how_to_install(home, monkeypatch):
+    root, _ = home
+    emb.save(root, {"provider": "local", "model": "BAAI/bge-small-zh-v1.5"})
+    monkeypatch.setitem(__import__("sys").modules, "fastembed", None)
+    sims, info = emb.semantic("lib", ["a"], "a")
+    assert sims is None and info["vector"] == "unavailable" and "fastembed" in info["reason"]
+    assert emb.local_runtime(root)["installed"] is False
+
+
+def test_floor_is_calibrated_from_queries_not_note_pairs(home):
+    root, _ = home
+    configure(root)
+    # Notes from one domain resemble each other; off-topic probe queries do not resemble them.
+    notes = [f"smoke mid retake tunnel note {i}" for i in range(25)]
+    emb.vectors(notes, emb.config(root))
+    floor = emb.calibrate(root)
+    docs = emb.vectors(notes, emb.config(root))
+    note_pairs = float(np.percentile(docs @ docs.T, 50))
+    assert floor < note_pairs
