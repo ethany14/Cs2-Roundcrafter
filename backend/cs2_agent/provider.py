@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def load_config(root=ROOT):
     values = dotenv_values(Path(root) / ".env", interpolate=False)
     if not all(values.get(key) for key in ("LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL_ID")):
-        raise ValueError("Fill LLM_BASE_URL, LLM_API_KEY and LLM_MODEL_ID in Cs2-agent/.env")
+        raise ValueError("Fill LLM_BASE_URL, LLM_API_KEY and LLM_MODEL_ID in the project .env")
     url = values["LLM_BASE_URL"].rstrip("/")
     parsed = urlsplit(url)
     if (parsed.scheme not in {"https", "http"} or not parsed.hostname or parsed.username or parsed.password

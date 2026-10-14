@@ -1,8 +1,8 @@
 <div align="center">
 
-# CS2 Analysis Agent
+# Debrief
 
-**A local-first Counter-Strike 2 demo lab: replay any match, study patterns across rounds,<br>plan tactics, and compare a movement-prediction model against what really happened.**
+**Demo analysis for Counter-Strike 2: replay any match, let an AI analyst explain it with evidence,<br>study patterns across rounds and plan tactics. Runs on your own machine.**
 
 [English](#english) · [中文](#中文)
 
@@ -16,7 +16,7 @@
 
 ## Why
 
-Most demo viewers only play a match back. CS2 Analysis Agent turns your `.dem` files into a workspace you can study. It replays rounds at 16 Hz with real utility, finds patterns across many rounds, keeps a library of your own plans, and runs a small movement model you can check against the real track. Everything runs on your own machine. The only exception is the Agent review, which is opt-in.
+Most demo viewers only play a match back. Debrief turns your CS2 `.dem` files into a workspace you can study. It replays rounds at 16 Hz with real utility, finds patterns across many rounds, keeps a library of your own plans, and runs a small movement model you can check against the real track. Everything runs on your own machine. The only exception is the Agent review, which is opt-in.
 
 ## Features
 
@@ -134,7 +134,7 @@ $env:PYTHONPATH='backend'; ./.venv/Scripts/python.exe -m pytest -q
 
 <div align="center">
 
-**本地运行的 CS2 demo 实验室：回放比赛、跨回合找规律、规划战术，<br>并把移动预测模型和真实走位放在一起对照。**
+**Debrief：本地运行的 CS2 demo 分析工具。回放比赛，让 AI 分析师基于证据解读，<br>跨回合找规律、规划战术。**
 
 ![单回合复盘](docs/images/replay-zh.png)
 
@@ -142,7 +142,7 @@ $env:PYTHONPATH='backend'; ./.venv/Scripts/python.exe -m pytest -q
 
 ### 为什么做它
 
-大多数 demo 播放器只能“放一遍”。CS2 Analysis Agent 把 `.dem` 变成可以研究的工作台：
+大多数 demo 播放器只能“放一遍”。Debrief 把 CS2 的 `.dem` 变成可以研究的工作台：
 
 - 16 Hz 回放，包含真实道具效果
 - 跨回合统计规律
