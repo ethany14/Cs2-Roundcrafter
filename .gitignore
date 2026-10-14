@@ -27,3 +27,6 @@ outputs/**
 secrets*.json
 *.key
 *.pem
+
+# Installed dependencies (re-created by npm install)
+**/node_modules/
