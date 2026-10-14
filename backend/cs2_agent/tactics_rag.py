@@ -13,6 +13,8 @@ def build_index():
   db.execute('CREATE TABLE IF NOT EXISTS cards (id TEXT PRIMARY KEY,map TEXT,side TEXT,economy TEXT,body TEXT)');db.execute('DELETE FROM cards')
   for c in cards:db.execute('INSERT INTO cards VALUES (?,?,?,?,?)',(c['id'],c['map'],c['side'],c['economy'],json.dumps(c)))
  db.close();return {'cards':len(cards),'source_sha256':hashlib.sha256((DIR/'cards.json').read_bytes()).hexdigest()}
+def card_text(c):return ' '.join(str(c.get(k) or '') for k in ('title','type','source_description','map','side','economy'))
+def card_texts():return [card_text(c) for c in json.loads((DIR/'cards.json').read_text())]
 def scenario(raw):
  allowed={'map','side','economy','query','players','party_size','utility','phase'}
  if set(raw)-allowed:raise ValueError('Unsupported scenario fields')
@@ -51,9 +53,14 @@ def retrieve(raw,limit=6):
    tf=doc.count(term);df=sum(term in d for d in docs);idf=math.log(1+(len(docs)-df+.5)/(df+.5));score+=idf*tf*2.2/(tf+1.2*(.25+.75*len(doc)/max(1,avg)))
   fit=eligibility(c,s)
   if fit['blocked']:continue
-  ranked.append({**c,'fit':fit,'retrieval_score':score,'query_matches':sorted(set(terms)&set(doc))})
+  ranked.append({**c,'fit':fit,'keyword_score':score,'query_matches':sorted(set(terms)&set(doc))})
+ from .embeddings import semantic,hybrid,method
+ sims,info=semantic('tactic_cards',[card_text(c) for c in ranked],s['query'])
+ for c,combined,i in zip(ranked,hybrid([c['keyword_score'] for c in ranked],sims),range(len(ranked))):
+  c['retrieval_score']=combined
+  if sims is not None:c['similarity']=round(float(sims[i]),4)
  ranked.sort(key=lambda c:(-c['retrieval_score'],c['id']))
- return {'workflows':[{'id':'nuke-pilot','url':'/nuke','status':'candidate_matching_and_constraints'}] if s['map']=='de_nuke' and s['side']=='T' else [],'scenario':s,'mode':'learning_candidates_only','retrieval_method':'structured filters + BM25-style lexical ranking with Chinese aliases; no embeddings','results':ranked[:limit],'eligible_recommendations':[],'no_exact_query_match':bool(terms and not any(c['query_matches'] for c in ranked)),'limits':['No verified executable tactics yet.','Scores measure textual relevance, not win probability.','No opponent habit inference or current-round demo parsing is performed by this endpoint.']}
+ return {'workflows':[{'id':'nuke-pilot','url':'/nuke','status':'candidate_matching_and_constraints'}] if s['map']=='de_nuke' and s['side']=='T' else [],'scenario':s,'mode':'learning_candidates_only','retrieval_method':method(info,'structured filters + BM25-style lexical ranking with Chinese aliases'),'results':ranked[:limit],'eligible_recommendations':[],'no_exact_query_match':bool(terms and not any(c['query_matches'] for c in ranked)),'limits':['No verified executable tactics yet.','Scores measure textual relevance, not win probability.','No opponent habit inference or current-round demo parsing is performed by this endpoint.']}
 def packet(raw):
  r=retrieve(raw);return {'scenario':r['scenario'],'mode':r['mode'],'candidates':[{'id':c['id'],'title':c['title'],'map':c['map'],'side':c['side'],'economy':c['economy'],'type':c['type'],'source_description':c['source_description'],'source_url':c['source_url'],'unknown':c['fit']['unknown'],'verification':c['verification']} for c in r['results']]}
 def validate_selection(value,evidence):

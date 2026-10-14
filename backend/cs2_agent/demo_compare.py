@@ -56,6 +56,26 @@ def profile(mid,n,side):
     with LOCK:CACHE[stamp]=value
     return value
 
+ZONE_DIMS=32
+EQUIPMENT=('rifle','mixed','pistol_or_light')
+
+def situation_vector(p):
+    """A round's situation as one vector: approach zones (hashed multi-hot, unit length), players alive,
+    equipment tier, anchor time, utility count and entry gap, each scaled so a typical difference costs
+    about the same. Computed locally from the parsed round; nothing is sent anywhere."""
+    import numpy as np
+    zones=np.zeros(ZONE_DIMS)
+    for z in p.get('approach_zones') or []:zones[int(hashlib.sha1(z.encode()).hexdigest(),16)%ZONE_DIMS]=1
+    if zones.any():zones/=np.linalg.norm(zones)
+    equipment=np.array([p['equipment']==e for e in EQUIPMENT],dtype=float)*0.7
+    other=[p['alive']['T']/5,p['alive']['CT']/5,p['anchor']/60,0.5*p['utility_count']/5,0.5*(p['entry_gap'] or 0)/10]
+    return np.concatenate([zones,equipment,other])
+
+def similarity(a,b):
+    """0-100: 100 is the same situation; the score halves roughly every 0.7 units of vector distance."""
+    import numpy as np
+    return round(100*float(np.exp(-np.linalg.norm(situation_vector(a)-situation_vector(b)))),1)
+
 def retrieve(mid,n,side,ensure=None,full=False):
     own=profile(mid,n,side);sha=dr.state(mid).get('sha256');candidates=[];seen=set();excluded={'same_demo':0,'map':0,'context':0}
     for s in dr.library():
@@ -75,14 +95,13 @@ def retrieve(mid,n,side,ensure=None,full=False):
             own_approach=set(own.get('approach_zones',[]));other_approach=set(p.get('approach_zones',[]))
             overlap=own_approach & other_approach
             if own_approach and other_approach and not overlap:excluded['context']+=1;continue
-            route_similarity=len(overlap)/len(own_approach|other_approach) if own_approach|other_approach else 0
-            score=100-15*(1-route_similarity)-difference*12-(0 if p['equipment']==own['equipment'] else 25)-min(20,abs(p['anchor']-own['anchor'])/3)
+            score=similarity(own,p)
             candidates.append({'match':s['id'],'name':s['name'],'round':p['round'],'source':info,'score':round(score,1),'map':p['map'],'side':side,'target':p['target'],'phase':p['phase'],'equipment':p['equipment'],'alive':p['alive'],'reasons':['同地图、阵营、目标区域与规则阶段']+(['共有接近区域：'+', '.join(sorted(overlap))] if overlap else ['接近区域缺失，无法核对路线']), 'differences':(['装备档不同'] if p['equipment']!=own['equipment'] else [])+(['锚点存活人数不同'] if difference else []),'scope':'局部可比；检索分数不是执行质量评分'})
     candidates.sort(key=lambda c:(-c['score'],c['match'],c['round']))
     shown=candidates if full else candidates[:8]
     # A saved comparison stays restorable when a growing library pushes its reference below the top 8.
     if ensure and not any((c['match'],c['round'])==ensure for c in shown):shown=shown+[{**c,'restored':True} for c in candidates if (c['match'],c['round'])==ensure]
-    return {'current':own,'identity':identity.get(mid),'candidates':shown,'excluded':excluded,'model_calls':0,'note':'仅检索明确归类的职业比赛；不把普通玩家或未分类上传混入参考库。' if candidates else '没有符合当前地图、阵营、目标与人数条件的职业回合；可继续独立分析当前比赛。'}
+    return {'current':own,'identity':identity.get(mid),'candidates':shown,'excluded':excluded,'model_calls':0,'retrieval_method':'hard filters (map, side, target, phase, players alive, approach overlap) + nearest neighbours over situation vectors, computed locally','note':'仅检索明确归类的职业比赛；不把普通玩家或未分类上传混入参考库。' if candidates else '没有符合当前地图、阵营、目标与人数条件的职业回合；可继续独立分析当前比赛。'}
 
 def pair(mid,n,other,other_n,side):
     if not any(c['match']==other and c['round']==other_n for c in retrieve(mid,n,side,full=True)['candidates']):raise ValueError('此职业回合不在当前可比候选中')

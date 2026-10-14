@@ -74,21 +74,48 @@ def distance(query, reference):
     return sum(terms.values()), terms
 
 
+def situation_vectors(cases):
+    """Pre-event situation vectors: position, elapsed time, equipment value, nearest-teammate distance."""
+    import numpy as np
+    f=[c['features'] for c in cases]
+    return {'position':np.array([x['position'] for x in f],dtype=float).reshape(len(f),-1),
+            'time':np.array([x['elapsed'] for x in f],dtype=float),
+            'equipment':np.array([x['equipment'] for x in f],dtype=float),
+            'proximity':np.array([np.nan if x['nearest_teammate'] is None else x['nearest_teammate'] for x in f],dtype=float)}
+
+
+def situation_distances(query, vectors):
+    """The same weighted distance as distance(), computed against every candidate vector at once."""
+    import numpy as np
+    q=situation_vectors([query])
+    parts={'position':np.linalg.norm(vectors['position']-q['position'][0],axis=1)/1000,
+           'time':np.abs(vectors['time']-q['time'][0])/30,
+           'equipment':np.abs(vectors['equipment']-q['equipment'][0])/3000}
+    a,b=np.isnan(q['proximity'][0]),np.isnan(vectors['proximity'])
+    parts['proximity']=np.where(a&b,0.,np.where(a|b,2.,np.abs(vectors['proximity']-q['proximity'][0])/700))
+    return sum(parts.values()),parts
+
+
 def retrieve(db, identifier, limit=3):
     query = get_case(db, identifier)
-    ranked=[]
+    candidates=[]
     for row in db.execute("SELECT payload FROM cases WHERE split='train' AND map=? AND side=? AND match_id<>? AND demo_hash<>?",
                           (query['map'],query['side'],query['match_id'],query['demo_sha256'])):
         candidate=json.loads(row[0])
         a,b=query['features'],candidate['features']
         if any(a[k]!=b[k] for k in ('own_alive','enemy_alive','bomb_planted')):
             continue
-        score,parts=distance(query,candidate)
-        if parts['position']>1 or parts['time']>1.5 or score>3:
-            continue
-        ranked.append({'id':candidate['id'],'match_id':candidate['match_id'],'round':candidate['round'],
-                       'tick':candidate['tick'],'source_url':candidate['source_url'],'features':candidate['features'],
-                       'distance':score,'distance_components':parts,'review_status':candidate['review_status']})
+        candidates.append(candidate)
+    ranked=[]
+    if candidates:
+        scores,parts=situation_distances(query,situation_vectors(candidates))
+        for i,candidate in enumerate(candidates):
+            p={k:float(v[i]) for k,v in parts.items()};score=float(scores[i])
+            if p['position']>1 or p['time']>1.5 or score>3:
+                continue
+            ranked.append({'id':candidate['id'],'match_id':candidate['match_id'],'round':candidate['round'],
+                           'tick':candidate['tick'],'source_url':candidate['source_url'],'features':candidate['features'],
+                           'distance':score,'distance_components':p,'review_status':candidate['review_status']})
     ranked.sort(key=lambda c:(c['distance'],c['id']))
     # One example per source round avoids adjacent deaths dominating retrieval.
     result=[];seen=set()
@@ -97,7 +124,7 @@ def retrieve(db, identifier, limit=3):
         if key not in seen: result.append(item);seen.add(key)
         if len(result)>=max(1,min(int(limit),5)): break
     return {'query_id':identifier,'matches':result,'status':'candidates_not_validated_analogies' if result else 'no_comparable_case',
-            'method':'hard state filters + explicit spatial/time/equipment/proximity distance; no embeddings',
+            'method':'hard state filters + nearest neighbours over pre-event situation vectors (position, time, equipment, teammate spacing), computed locally',
             'limits':'All examples selected before deaths; no outcome-based ranking; no proof of optimal actions.'}
 
 
@@ -117,13 +144,28 @@ def shortlist(db, match_id, limit=3):
     return selected
 
 
+def knowledge_texts(db, map_name=None):
+    rows=db.execute('SELECT title,body FROM knowledge WHERE reviewed=1'+(' AND map=?' if map_name else '')+' ORDER BY id',(map_name,) if map_name else ()).fetchall()
+    return [t+'\n'+b for t,b in rows]
+
+
 def knowledge_search(db, query, map_name='de_dust2'):
+    """Hybrid search over reviewed notes only: full-text rank blended with embedding similarity."""
     # Quote words as literals: source strings never become FTS operators.
     tokens=query.split()[:12]
     if not tokens:return []
     expression=' OR '.join('"'+t.replace('"','""')+'"' for t in tokens)
-    return [dict(r) for r in db.execute('''SELECT k.* FROM knowledge_fts f JOIN knowledge k ON k.id=f.id
-       WHERE knowledge_fts MATCH ? AND k.map=? AND k.reviewed=1 ORDER BY rank LIMIT 5''',(expression,map_name))]
+    lexical=[dict(r) for r in db.execute('''SELECT k.* FROM knowledge_fts f JOIN knowledge k ON k.id=f.id
+       WHERE knowledge_fts MATCH ? AND k.map=? AND k.reviewed=1 ORDER BY rank LIMIT 50''',(expression,map_name))]
+    from .embeddings import semantic,hybrid,MIN_SIMILARITY
+    rows=[dict(r) for r in db.execute('SELECT * FROM knowledge WHERE map=? AND reviewed=1 ORDER BY id',(map_name,))]
+    sims,_=semantic('reviewed_notes',[r['title']+'\n'+r['body'] for r in rows],query)
+    if sims is None:return lexical[:5]
+    rank={r['id']:i for i,r in enumerate(lexical)}
+    keyword=[1/(1+rank[r['id']]) if r['id'] in rank else 0 for r in rows]
+    scored=[(score,r,float(s)) for score,r,s in zip(hybrid(keyword,sims),rows,sims) if r['id'] in rank or s>=MIN_SIMILARITY]
+    scored.sort(key=lambda x:(-x[0],x[1]['id']))
+    return [{**r,'similarity':round(s,4)} for _,r,s in scored[:5]]
 
 
 def import_knowledge(db, records):

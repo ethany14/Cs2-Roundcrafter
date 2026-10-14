@@ -159,19 +159,26 @@ def words(query):
     for a,b in ALIASES.items():q=q.replace(a,' '+b+' ')
     return set(re.findall(r'[a-z0-9]+',q)) - {'cs2','de','nuke','this','from','how','the','a','t','site'}
 
+def card_text(c):return ' '.join([c['title'],c['kind'] or '',*c['origin'],*c['target'],c.get('side') or '',c['map']])
+
 def retrieve_cards(query,map_name='de_nuke',cards=None):
+    """Hard filters (map, grenade type, named destination), then keyword overlap blended with embedding similarity."""
+    from .embeddings import semantic,hybrid,MIN_SIMILARITY
     terms=words(query)
     requested_kind=next((k for k in ['smoke','flash','fire','he'] if k in terms),None)
-    ranked=[]
+    pool=[]
     for c in cards if cards is not None else load_catalog()['cards']:
         if c['map']!=map_name:continue
         if requested_kind and c['kind']!=requested_kind:continue
         tokens=words(' '.join([c['title'],c['kind'] or '',*c['origin'],*c['target']]))
-        score=len(terms & tokens)
         # Generic grenade words alone cannot select an unrelated named destination.
         destinations=terms & {'heaven','outside','cross','hut','backsite','vent','ramp','secret','garage'}
         if destinations and not destinations & tokens:continue
-        if score:ranked.append((score,c))
+        pool.append((len(terms & tokens),c))
+    sims,_=semantic('lineup_cards',[card_text(c) for _,c in pool],query)
+    ranked=[]
+    for i,(combined,(score,c)) in enumerate(zip(hybrid([s for s,_ in pool],sims),pool)):
+        if score or (sims is not None and sims[i]>=MIN_SIMILARITY):ranked.append((combined,c))
     return [c for _,c in sorted(ranked,key=lambda r:(-r[0],r[1]['id']))][:6]
 
 def check_fit(need,card,player=None):

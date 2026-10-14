@@ -162,6 +162,9 @@ class Handler(BaseHTTPRequestHandler):
   if route=='/api/llm/settings':
    from . import llm_settings
    return self.send(200,llm_settings.public(ROOT))
+  if route=='/api/embedding/settings':
+   from . import embeddings
+   return self.send(200,embeddings.public(ROOT))
   if route=='/api/status':
    from .provider import load_config
    try:config=load_config();model={'configured':True,'host':urlsplit(config['endpoint']).hostname,'model':config['LLM_MODEL_ID'],'provider':config.get('provider'),'source':config.get('source')}
@@ -197,8 +200,8 @@ class Handler(BaseHTTPRequestHandler):
     return self.send(404,{'error':'Not found'})
    except RuntimeError as e:return self.send(409,{'error':str(e)[:200]})
    except (ValueError,KeyError,TypeError,OSError) as e:return self.send(400,{'error':str(e)[:200]})
-  if route.startswith('/api/llm/'):
-   from . import llm_settings
+  if route.startswith('/api/llm/') or route.startswith('/api/embedding/'):
+   from . import llm_settings,embeddings
    try:
     size=int(self.headers.get('Content-Length','0'))
     if not 0<size<=20000:raise ValueError('请求大小超限')
@@ -208,6 +211,10 @@ class Handler(BaseHTTPRequestHandler):
     if route=='/api/llm/clear':return self.send(200,llm_settings.clear(ROOT))
     if route=='/api/llm/test':return self.send(200,llm_settings.test(ROOT,raw))
     if route=='/api/llm/models':return self.send(200,llm_settings.models(ROOT,raw))
+    if route=='/api/embedding/settings':return self.send(200,embeddings.save(ROOT,raw))
+    if route=='/api/embedding/clear':return self.send(200,embeddings.clear(ROOT))
+    if route=='/api/embedding/test':return self.send(200,embeddings.test(ROOT,raw))
+    if route=='/api/embedding/rebuild':return self.send(200,embeddings.rebuild(ROOT))
     return self.send(404,{'error':'Not found'})
    except (ValueError,KeyError,TypeError,OSError) as e:return self.send(400,{'error':str(e)[:200]})
   if route.startswith('/api/workbench/'):
