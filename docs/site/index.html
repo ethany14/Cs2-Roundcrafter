@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="A local-first Counter-Strike 2 demo lab with an evidence-bound AI analyst: replay rounds, find patterns across matches, plan tactics.">
+<meta property="og:title" content="CS2 Analysis Agent">
+<meta property="og:description" content="Replay any round. An AI analyst explains it, and every claim links back to a clip.">
+<meta property="og:image" content="https://ethany14.github.io/CS2-analysis-agent/images/replay.png">
+<title>CS2 Analysis Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap">
+<style>
+/* Layout: a mission-control dossier. Telemetry rail on the left of each section, bracketed instrument panels, one red signal line running the page. */
+:root{
+  color-scheme:dark;
+  --bg:#08090b; --bg2:#0d0f12; --panel:#111317; --raise:#1a1d22;
+  --line:#23272e; --line2:#343a43;
+  --ink:#ece6d6; --ink2:#c9c3b4; --dim:#958f82; --mute:#6a6760;
+  --red:#fc3d21; --amber:#ffb23f; --cyan:#6fd0e6; --green:#82d68f;
+  --t:#f0b34a; --ct:#62b6e6;
+  --head:"Barlow Condensed","Oswald","Arial Narrow","Microsoft YaHei","PingFang SC",sans-serif;
+  --body:"IBM Plex Sans","Microsoft YaHei","PingFang SC",system-ui,sans-serif;
+  --mono:"Space Mono","IBM Plex Mono",ui-monospace,Consolas,"Microsoft YaHei",monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 var(--body);
+  background-image:radial-gradient(circle at 1px 1px,#ffffff0a 1px,transparent 0);background-size:24px 24px}
+a{color:inherit}
+img{display:block;max-width:100%;height:auto}
+:focus-visible{outline:1px solid var(--amber);outline-offset:2px}
+html.zh .en, html:not(.zh) .zh{display:none!important}
+
+.wrap{max-width:1200px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.mono{font-family:var(--mono)}
+.eyebrow{font:700 11px/1.4 var(--mono);letter-spacing:.22em;text-transform:uppercase;color:var(--dim)}
+.eyebrow b{color:var(--red);font-weight:700}
+
+/* top bar */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:#060708ee;backdrop-filter:blur(6px);border-bottom:1px solid var(--line2)}
+.top::after{content:"";position:absolute;left:0;right:0;bottom:-3px;height:2px;background:repeating-linear-gradient(90deg,var(--red) 0 46px,transparent 46px 52px);opacity:.8}
+.top .wrap{display:flex;align-items:center;gap:20px;min-height:54px}
+.brand{display:flex;align-items:center;gap:10px;font:700 19px var(--head);letter-spacing:.12em;text-decoration:none;white-space:nowrap}
+.brand i{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--red);color:#fff;font:700 10px var(--mono);font-style:normal;letter-spacing:0}
+.nav{display:flex;gap:2px;margin-left:auto;flex-wrap:wrap}
+.nav a{font:700 11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);text-decoration:none;padding:8px 10px}
+.nav a:hover{color:var(--ink)}
+.lang{display:flex;border:1px solid var(--line2)}
+.lang button{font:700 12px var(--mono);background:transparent;color:var(--dim);border:0;padding:6px 10px;cursor:pointer}
+.lang button[aria-pressed=true]{background:var(--ink);color:#111}
+@media (max-width:820px){.nav{display:none}.lang{margin-left:auto}}
+
+/* hero */
+.hero{padding-block:56px 40px}
+.hero-grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:48px;align-items:center}
+@media (max-width:960px){.hero-grid{grid-template-columns:1fr;gap:32px}}
+.status{display:flex;flex-wrap:wrap;gap:8px 18px;margin-bottom:22px}
+.status span{font:400 11px var(--mono);letter-spacing:.14em;color:var(--dim);text-transform:uppercase}
+.status span::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:8px;vertical-align:1px;box-shadow:0 0 8px var(--green)}
+.status span:nth-child(2)::before{background:var(--amber);box-shadow:0 0 8px var(--amber)}
+h1{font:800 clamp(56px,9vw,112px)/.86 var(--head);letter-spacing:.01em;text-transform:uppercase;margin:0;text-wrap:balance}
+h1 em{font-style:normal;color:var(--red)}
+html.zh h1{font-size:clamp(46px,7vw,84px);line-height:1.02}
+.lede{font-size:18px;color:var(--ink2);max-width:34em;margin:22px 0 28px}
+.cta{display:flex;flex-wrap:wrap;gap:12px}
+.btn{display:inline-flex;align-items:center;gap:10px;font:700 12px var(--mono);letter-spacing:.14em;text-transform:uppercase;text-decoration:none;padding:13px 18px;border:1px solid var(--line2);color:var(--ink);transition:border-color .15s,background .15s}
+.btn:hover{border-color:var(--amber)}
+.btn.primary{background:var(--red);border-color:var(--red);color:#fff}
+.btn.primary:hover{background:#ff5a3f;border-color:#ff5a3f}
+
+/* bracketed instrument frame */
+.frame{position:relative;border:1px solid var(--line2);background:var(--panel);padding:10px}
+.frame::before,.frame::after{content:"";position:absolute;width:14px;height:14px;border:2px solid var(--amber)}
+.frame::before{top:-6px;left:-6px;border-right:0;border-bottom:0}
+.frame::after{bottom:-6px;right:-6px;border-left:0;border-top:0}
+.frame figcaption{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font:400 11px var(--mono);letter-spacing:.1em;color:var(--mute);padding:10px 2px 0;text-transform:uppercase}
+.frame figcaption b{color:var(--amber);font-weight:400}
+figure{margin:0}
+.hero .frame{transform:perspective(1600px) rotateY(-4deg);transform-origin:left center}
+@media (max-width:960px){.hero .frame{transform:none}}
+
+/* readout strip */
+.readout{border-block:1px solid var(--line2);background:var(--bg2);margin-top:56px}
+.readout .wrap{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+.readout div{padding:18px 18px 16px;border-left:1px solid var(--line)}
+.readout div:first-child{border-left:0;padding-left:0}
+.readout strong{display:block;font:700 34px/1 var(--head);letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.readout strong small{font:400 13px var(--mono);color:var(--dim);margin-left:4px}
+.readout span{font:400 11px var(--mono);letter-spacing:.12em;color:var(--dim);text-transform:uppercase}
+@media (max-width:700px){.readout .wrap{grid-template-columns:repeat(2,minmax(0,1fr))}.readout div:nth-child(3){border-left:0;padding-left:0}.readout div:nth-child(n+3){border-top:1px solid var(--line)}}
+
+/* sections */
+section{padding-block:88px 0}
+.sec-head{display:grid;grid-template-columns:180px minmax(0,1fr);gap:24px;margin-bottom:40px}
+@media (max-width:700px){.sec-head{grid-template-columns:1fr;gap:8px}}
+.sec-head .eyebrow{padding-top:10px;border-top:2px solid var(--red)}
+h2{font:700 clamp(36px,5vw,58px)/.95 var(--head);text-transform:uppercase;margin:0;text-wrap:balance;letter-spacing:.01em}
+html.zh h2{line-height:1.15}
+.sec-head p{color:var(--ink2);max-width:40em;margin:14px 0 0}
+h3{font:700 28px/1.05 var(--head);text-transform:uppercase;margin:0 0 6px;letter-spacing:.02em;text-wrap:balance}
+
+/* module rows */
+.module{display:grid;grid-template-columns:180px minmax(0,5fr) minmax(0,7fr);gap:24px 32px;padding-block:44px;border-top:1px solid var(--line)}
+.module:first-of-type{border-top:0;padding-top:0}
+.module .idx{font:700 64px/.8 var(--head);color:transparent;-webkit-text-stroke:1px var(--line2)}
+.module .idx small{display:block;font:700 11px var(--mono);letter-spacing:.2em;color:var(--dim);-webkit-text-stroke:0;margin-top:14px}
+.module ul{list-style:none;margin:16px 0 0;padding:0;display:grid;gap:10px}
+.module li{position:relative;padding-left:20px;color:var(--ink2);font-size:15px}
+.module li::before{content:"";position:absolute;left:0;top:.7em;width:9px;height:2px;background:var(--red)}
+.module .copy{min-width:0}
+.module .tagline{color:var(--amber);font:400 12px var(--mono);letter-spacing:.08em;text-transform:uppercase}
+@media (max-width:960px){.module{grid-template-columns:minmax(0,1fr)}.module .idx{font-size:44px}}
+.module.noimg .copy{grid-column:2 / -1}
+@media (max-width:960px){.module.noimg .copy{grid-column:auto}}
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 32px}
+@media (max-width:700px){.two{grid-template-columns:1fr}}
+
+/* pipeline */
+.pipe{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border:1px solid var(--line2);background:var(--panel)}
+.pipe div{padding:20px 18px 22px;border-left:1px solid var(--line);position:relative;min-width:0}
+.pipe div:first-child{border-left:0}
+.pipe div:not(:last-child)::after{content:"";position:absolute;right:-6px;top:28px;width:10px;height:10px;background:var(--panel);border-top:1px solid var(--red);border-right:1px solid var(--red);transform:rotate(45deg);z-index:1}
+.pipe .t{font:400 11px var(--mono);color:var(--red);letter-spacing:.14em}
+.pipe h4{font:700 20px/1.1 var(--head);text-transform:uppercase;margin:8px 0 6px;letter-spacing:.03em}
+.pipe p{margin:0;font-size:14px;color:var(--dim)}
+.side{margin-top:12px;display:flex;flex-wrap:wrap;gap:10px}
+.side span{font:400 12px var(--mono);color:var(--ink2);border:1px dashed var(--line2);padding:7px 12px}
+.side span b{color:var(--cyan);font-weight:400}
+@media (max-width:900px){.pipe{grid-template-columns:1fr}.pipe div{border-left:0;border-top:1px solid var(--line)}.pipe div:first-child{border-top:0}.pipe div:not(:last-child)::after{right:auto;left:24px;top:auto;bottom:-6px;transform:rotate(135deg)}}
+
+/* flight rules */
+.rules{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line)}
+.rules div{background:var(--bg);padding:22px 20px}
+.rules .k{font:700 11px var(--mono);color:var(--green);letter-spacing:.16em}
+.rules h4{font:700 22px/1.1 var(--head);text-transform:uppercase;margin:10px 0 8px}
+.rules p{margin:0;font-size:14px;color:var(--ink2)}
+.rules code{font:12px var(--mono);color:var(--amber)}
+@media (max-width:960px){.rules{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.rules{grid-template-columns:1fr}}
+
+/* launch */
+.launch{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,7fr);gap:40px}
+@media (max-width:900px){.launch{grid-template-columns:1fr}}
+.req{list-style:none;padding:0;margin:0;display:grid;gap:0;border-top:1px solid var(--line)}
+.req li{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);font:400 13px var(--mono);color:var(--ink2)}
+.req li b{color:var(--ink);font-weight:700}
+.term{border:1px solid var(--line2);background:#050607;min-width:0}
+.term-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line2);font:400 11px var(--mono);color:var(--mute);letter-spacing:.1em}
+.term-bar button{font:700 11px var(--mono);letter-spacing:.12em;background:transparent;color:var(--ink2);border:1px solid var(--line2);padding:5px 10px;cursor:pointer}
+.term-bar button:hover{border-color:var(--amber)}
+.term pre{margin:0;padding:18px;overflow-x:auto;font:13px/1.8 var(--mono);color:var(--ink2)}
+.term pre .c{color:var(--mute)}
+.term pre .p{color:var(--red)}
+.after{margin-top:16px;font-size:15px;color:var(--ink2)}
+.after code{font:13px var(--mono);color:var(--amber)}
+
+/* agent */
+.agent-grid{display:grid;grid-template-columns:minmax(0,6fr) minmax(0,5fr);gap:28px;align-items:start}
+@media (max-width:960px){.agent-grid{grid-template-columns:1fr}}
+.log{border:1px solid var(--line2);background:#050607;font-family:var(--mono);min-width:0}
+.log-head,.log-foot{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 16px;font-size:11px;letter-spacing:.12em;color:var(--mute)}
+.log-head{border-bottom:1px solid var(--line2)}
+.log-foot{border-top:1px solid var(--line2);color:var(--dim);letter-spacing:.06em}
+.log .live{color:var(--green)}
+.log .live::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:8px;box-shadow:0 0 8px var(--green)}
+.log ol{list-style:none;margin:0;padding:8px 0}
+.log li{display:grid;grid-template-columns:62px minmax(0,1fr);gap:2px 14px;padding:10px 16px;font-size:13px;border-left:2px solid transparent}
+.log li time{color:var(--mute);font-size:11px;padding-top:2px;grid-row:span 2}
+.log li code{color:var(--cyan);font:700 13px var(--mono);overflow-wrap:anywhere}
+.log li .ret{color:var(--ink2);font-size:12px}
+.log li.audit{border-left-color:var(--red);background:#fc3d210d}
+.log li.audit code{color:var(--red)}
+@media (prefers-reduced-motion:no-preference){.log li{animation:boot .6s both}.log li:nth-child(2){animation-delay:.15s}.log li:nth-child(3){animation-delay:.3s}.log li:nth-child(4){animation-delay:.45s}}
+.finding{position:relative;border:1px solid var(--line2);background:var(--panel);padding:18px 20px;min-width:0}
+.finding::before{content:"";position:absolute;left:-1px;top:-1px;bottom:-1px;width:3px;background:var(--t)}
+.f-top{display:flex;gap:12px;justify-content:space-between;font:400 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.f-top .ex{color:#111;background:var(--ink2);padding:1px 6px}
+.finding h4{font:700 26px/1.05 var(--head);text-transform:uppercase;margin:10px 0 14px;letter-spacing:.02em}
+.finding dl{margin:0;display:grid;grid-template-columns:96px minmax(0,1fr);gap:10px 14px}
+.finding dt{font:700 10px/1.9 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--amber)}
+.finding dd{margin:0;font-size:14px;color:var(--ink2)}
+.finding dd ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+@media (max-width:520px){.finding dl{grid-template-columns:1fr;gap:2px}.finding dd{margin-bottom:8px}}
+.chip{display:inline-block;font:700 10px/1.6 var(--mono);color:var(--cyan);border:1px solid #6fd0e666;padding:0 5px;margin-right:8px}
+.f-foot{margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}
+.btn-mini{display:inline-block;font:700 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:#fff;background:var(--red);padding:7px 12px}
+.modes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);margin-top:28px}
+.modes>div{background:var(--bg);padding:20px 18px;display:flex;flex-direction:column;gap:8px}
+.modes .k{font:700 11px var(--mono);letter-spacing:.16em;color:var(--red)}
+.modes h4{font:700 22px/1.05 var(--head);text-transform:uppercase;margin:0}
+.modes p{margin:0;font-size:14px;color:var(--ink2);flex:1}
+.modes .budget{font:400 11px var(--mono);color:var(--dim);border-top:1px dashed var(--line2);padding-top:10px}
+@media (max-width:960px){.modes{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.modes{grid-template-columns:1fr}}
+.guards{list-style:none;margin:28px 0 0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}
+.guards li{font-size:14px;color:var(--ink2);padding-left:16px;border-left:2px solid var(--red)}
+.guards b{display:block;font:700 18px/1.2 var(--head);text-transform:uppercase;color:var(--ink);letter-spacing:.03em;margin-bottom:4px}
+.guards code{font:12px var(--mono);color:var(--amber)}
+@media (max-width:760px){.guards{grid-template-columns:1fr}}
+.exp{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;border:1px dashed var(--line2);padding:16px 18px;margin-top:8px}
+.exp p{margin:0;flex:1 1 300px;font-size:14px;color:var(--dim)}
+.exp b{color:var(--ink2)}
+.exp-tag{font:700 10px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:#111;padding:4px 8px;background:repeating-linear-gradient(-45deg,var(--amber) 0 8px,#e09a2c 8px 16px)}
+
+footer{margin-top:100px;border-top:1px solid var(--line2);padding-block:28px 40px}
+footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:16px;font:400 11px var(--mono);letter-spacing:.12em;color:var(--mute);text-transform:uppercase}
+footer a{color:var(--ink2);text-decoration:none}
+footer a:hover{color:var(--amber)}
+
+/* hero load sequence */
+@media (prefers-reduced-motion:no-preference){
+  .boot{animation:boot .7s cubic-bezier(.2,.7,.2,1) both}
+  .boot:nth-child(2){animation-delay:.08s}.boot:nth-child(3){animation-delay:.16s}.boot:nth-child(4){animation-delay:.24s}
+  @keyframes boot{from{transform:translateY(10px);opacity:.25}to{transform:none;opacity:1}}
+  .scan{position:absolute;inset:10px 10px 40px;pointer-events:none;background:linear-gradient(180deg,transparent 0,#fc3d2118 48%,#fc3d2140 50%,transparent 52%) 0 0/100% 300%;animation:scan 5s linear infinite;mix-blend-mode:screen}
+  @keyframes scan{from{background-position:0 100%}to{background-position:0 0}}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top"><i>CS</i>CS2 AGENT</a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#agent">Agent</a>
+      <a href="#modules"><span class="en">Modules</span><span class="zh">功能</span></a>
+      <a href="#pipeline"><span class="en">How it works</span><span class="zh">原理</span></a>
+      <a href="#rules"><span class="en">Privacy</span><span class="zh">隐私</span></a>
+      <a href="#launch"><span class="en">Quick start</span><span class="zh">快速开始</span></a>
+    </nav>
+    <div class="lang" role="group" aria-label="Language">
+      <button type="button" id="lang-zh" aria-pressed="false">中</button>
+      <button type="button" id="lang-en" aria-pressed="true">EN</button>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+  <div class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <div class="status boot">
+          <span class="en">Local compute</span><span class="zh">本地计算</span>
+          <span class="en">16 Hz telemetry</span><span class="zh">16 Hz 遥测</span>
+        </div>
+        <h1 class="boot">
+          <span class="en">Every round,<br><em>on the record.</em></span>
+          <span class="zh">每一回合，<br><em>都有据可查。</em></span>
+        </h1>
+        <p class="lede boot">
+          <span class="en">CS2 Analysis Agent turns your <span class="mono">.dem</span> files into a lab you can study. An AI analyst reads each round, cross-checks the key moments and explains what happened, and every claim links back to a clip you can replay. Around it: a broadcast-style replay, multi-round heatmaps and a tactic room.</span>
+          <span class="zh">CS2 Analysis Agent 把你的 <span class="mono">.dem</span> 变成可以研究的实验室。AI 分析师逐回合读取证据、核对关键时刻、解释发生了什么，每条结论都能跳回可重播的片段。配套还有转播级回放、多回合热力图和战术室。</span>
+        </p>
+        <div class="cta boot">
+          <a class="btn primary" href="https://github.com/ethany14/CS2-analysis-agent" target="_blank" rel="noopener"><span class="en">View on GitHub</span><span class="zh">在 GitHub 查看</span> ↗</a>
+          <a class="btn" href="#agent"><span class="en">See the Agent</span><span class="zh">了解 Agent</span></a>
+        </div>
+      </div>
+      <figure class="frame boot">
+        <img class="en" src="../images/replay.png" width="1600" height="900" alt="Round review: Dust2 round 6 between Team Vitality and FURIA, with player positions, smokes and the scoreboard">
+        <img class="zh" src="../images/replay-zh.png" width="1600" height="900" alt="单回合复盘界面：Dust2 第 6 回合，Vitality 对 FURIA">
+        <div class="scan" aria-hidden="true"></div>
+        <figcaption><span>DE_DUST2 · R6 · <b>T+00:33.0</b></span><span>VITALITY 4 — 1 FURIA</span></figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <div class="readout" aria-label="Key figures">
+    <div class="wrap">
+      <div><strong>04</strong><span class="en">Agent analysis modes</span><span class="zh">种 Agent 分析模式</span></div>
+      <div><strong>100<small>%</small></strong><span class="en">Claims tied to evidence IDs</span><span class="zh">结论绑定证据编号</span></div>
+      <div><strong>0</strong><span class="en">Player names sent to the model</span><span class="zh">个选手名发送给模型</span></div>
+      <div><strong>0</strong><span class="en">Model calls without a click</span><span class="zh">次未经点击的模型调用</span></div>
+    </div>
+  </div>
+
+  <section id="agent">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="eyebrow"><b>■</b> <span class="en">Agent analysis</span><span class="zh">Agent 分析</span></div>
+        <div>
+          <h2><span class="en">An analyst that shows its evidence</span><span class="zh">会出示证据的 AI 分析师</span></h2>
+          <p><span class="en">The Agent never watches the demo raw. The server first builds an evidence packet from the parsed match: positions, utility, kills, economy, each with an ID. The Agent reads it with tools, checks the windows that matter, and submits findings that must cite those IDs. A local audit then removes anything the data does not support.</span><span class="zh">Agent 不直接“看” demo。服务端先从解析结果生成证据包：站位、道具、击杀、经济，每条都有编号。Agent 用工具读取证据、核对关键时间窗，提交的每条发现都必须引用这些编号；随后本地审核会删掉数据不支持的结论。</span></p>
+        </div>
+      </div>
+
+      <div class="agent-grid">
+        <div class="log" aria-label="Agent run log">
+          <div class="log-head"><span>MISSION LOG · DE_DUST2 R6</span><span class="live">RUN 1 / 5</span></div>
+          <ol>
+            <li><time>T+00.0</time><code>read_round_evidence()</code><span class="ret">→ <span class="en">facts and testable hypotheses</span><span class="zh">事实与可验证假设</span></span></li>
+            <li><time>T+06.2</time><code>read_action_window(18, 34)</code><span class="ret">→ <span class="en">player states and events, max 30 s</span><span class="zh">玩家状态与事件，最长 30 秒</span></span></li>
+            <li><time>T+19.8</time><code>submit_findings(…)</code><span class="ret">→ <span class="en">every evidence ID found in packet</span><span class="zh">证据编号全部来自证据包</span></span></li>
+            <li class="audit"><time>LOCAL</time><code>audit</code><span class="ret">→ <span class="en">1 claim removed: utility not near the entry</span><span class="zh">删除 1 条：道具与进点无空间关联</span></span></li>
+          </ol>
+          <div class="log-foot"><span class="en">Calls 2 / 5 · input 50k token cap · 300 s limit</span><span class="zh">调用 2 / 5 · 输入上限 5 万 token · 限时 300 秒</span></div>
+        </div>
+
+        <article class="finding">
+          <div class="f-top"><span class="en">Finding 1 of 3</span><span class="zh">发现 1 / 3</span><span class="ex"><span class="en">Example output</span><span class="zh">示例输出</span></span></div>
+          <h4><span class="en">T side took mid before splitting to B</span><span class="zh">T 方先控中路，再分兵打 B</span></h4>
+          <dl>
+            <dt><span class="en">Facts</span><span class="zh">事实</span></dt>
+            <dd><ul>
+              <li><span class="chip">E4</span><span class="en">P2 and P5 reach Top of Mid by 0:22.</span><span class="zh">P2、P5 在 0:22 前到达中路上端。</span></li>
+              <li><span class="chip">E7</span><span class="en">Smoke detonates at CT mid at 0:24.</span><span class="zh">0:24 烟雾在 CT 中路生效。</span></li>
+              <li><span class="chip">E9</span><span class="en">P1 enters B site at 0:41.</span><span class="zh">P1 在 0:41 进入 B 包点。</span></li>
+            </ul></dd>
+            <dt><span class="en">Inference</span><span class="zh">推断</span></dt>
+            <dd><span class="en">The mid smoke cut the CT rotation path, so B saw one defender at the moment of entry.</span><span class="zh">中路烟切断了 CT 回防路线，因此进点时 B 区只有一名防守者。</span></dd>
+            <dt><span class="en">Uncertainty</span><span class="zh">不确定性</span></dt>
+            <dd><span class="en">Voice comms are not in the demo, so the plan is inferred from movement.</span><span class="zh">demo 不含语音，战术意图是根据走位推断的。</span></dd>
+            <dt><span class="en">Try this</span><span class="zh">建议</span></dt>
+            <dd><span class="en">As CT, keep one player able to reach B through tunnels before the mid smoke lands.</span><span class="zh">CT 方应在中路烟落下前，保留一名可以从 B 洞回防的队员。</span></dd>
+          </dl>
+          <div class="f-foot"><span class="btn-mini">▶ <span class="en">Replay 0:18 – 0:42</span><span class="zh">重播 0:18 – 0:42</span></span></div>
+        </article>
+      </div>
+
+      <div class="modes">
+        <div>
+          <div class="k">MODE A</div>
+          <h4><span class="en">Round read</span><span class="zh">单回合解读</span></h4>
+          <p><span class="en">Both sides' actions in one round, checked window by window.</span><span class="zh">逐个时间窗核对，解读一个回合里双方的行动。</span></p>
+          <div class="budget"><span class="en">≤ 5 calls / round</span><span class="zh">每回合 ≤ 5 次调用</span></div>
+        </div>
+        <div>
+          <div class="k">MODE B</div>
+          <h4><span class="en">Whole match</span><span class="zh">整场复盘</span></h4>
+          <p><span class="en">Runs the round read across a match in parallel, under one total budget you set.</span><span class="zh">在整场比赛上并行运行单回合解读，使用你设定的总预算。</span></p>
+          <div class="budget"><span class="en">1–200 calls · 2 / round · 30 min</span><span class="zh">1–200 次 · 每回合 2 次 · 30 分钟</span></div>
+        </div>
+        <div>
+          <div class="k">MODE C</div>
+          <h4><span class="en">Patterns</span><span class="zh">多回合规律</span></h4>
+          <p><span class="en">Finds habits repeated across the rounds you filtered, optionally against a reference group.</span><span class="zh">在你筛选出的回合中找重复习惯，可与参考组对比。</span></p>
+          <div class="budget"><span class="en">≤ 2 calls · up to 4 findings</span><span class="zh">≤ 2 次调用 · 最多 4 条发现</span></div>
+        </div>
+        <div>
+          <div class="k">MODE D</div>
+          <h4><span class="en">Pro comparison</span><span class="zh">职业对照</span></h4>
+          <p><span class="en">Retrieves a structurally similar pro round on your machine, then explains the differences worth learning and when they apply.</span><span class="zh">在本地检索结构相似的职业回合，解释值得学习的区别及适用条件。</span></p>
+          <div class="budget"><span class="en">≤ 2 calls · findings + limits</span><span class="zh">≤ 2 次调用 · 发现 + 局限</span></div>
+        </div>
+      </div>
+
+      <ul class="guards">
+        <li><b><span class="en">Facts apart from guesses</span><span class="zh">事实与推断分开</span></b><span class="en">Each finding separates facts, inference, uncertainty and a recommendation.</span><span class="zh">每条发现分为事实、推断、不确定性和建议。</span></li>
+        <li><b><span class="en">Anonymised players</span><span class="zh">选手匿名</span></b><span class="en">The model sees P1–P10. Names and SteamIDs stay on your machine, and a test enforces it.</span><span class="zh">模型只看到 P1–P10，选手名和 SteamID 留在本机，并有测试保证。</span></li>
+        <li><b><span class="en">Your model, your language</span><span class="zh">自选模型与语言</span></b><span class="en">Point it at your own endpoint in <code>.env</code>. Answers follow the 中文 / English switch.</span><span class="zh">在 <code>.env</code> 配置你自己的模型服务，回答跟随中 / 英切换。</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="modules">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="eyebrow"><b>■</b> <span class="en">Modules</span><span class="zh">功能模块</span></div>
+        <div>
+          <h2><span class="en">The workspace around the Agent</span><span class="zh">围绕 Agent 的工作台</span></h2>
+          <p><span class="en">Most demo viewers only play a match back. These modules let you see what the Agent is talking about, and study it yourself.</span><span class="zh">大多数 demo 播放器只会“放一遍”。这些模块让你看清 Agent 说的是什么，也方便自己研究。</span></p>
+        </div>
+      </div>
+
+      <article class="module">
+        <div class="idx">01<small><span class="en">Round review</span><span class="zh">单回合复盘</span></small></div>
+        <div class="copy">
+          <div class="tagline"><span class="en">Reads like a broadcast</span><span class="zh">像转播一样清楚</span></div>
+          <h3><span class="en">A 2D replay with the real utility</span><span class="zh">带真实道具的 2D 回放</span></h3>
+          <ul>
+            <li><span class="en">16 Hz interpolated playback with real player names, HP and armor bars, the weapon in hand and full loadout icons.</span><span class="zh">16 Hz 插值回放，真实选手名、血量护甲、手持武器和完整装备图标。</span></li>
+            <li><span class="en">Real grenade trajectories with smoke, molotov, flash and HE effects, shot tracers and a kill feed.</span><span class="zh">真实道具轨迹，烟、火、闪、雷效果，开枪线和击杀信息。</span></li>
+            <li><span class="en">Live score, freeze-time economy and event ticks on the timeline. Switch floors on two-level maps such as Nuke.</span><span class="zh">实时比分、冻结期经济、时间轴事件标记；Nuke 等多层地图可切换楼层。</span></li>
+          </ul>
+        </div>
+        <figure class="frame">
+          <img src="../images/replay.png" width="1600" height="900" loading="lazy" alt="Round review with scoreboard, loadouts and timeline">
+          <figcaption><span><span class="en">Scoreboard · money at freeze end</span><span class="zh">记分板 · 冻结结束时的经济</span></span><b>LIVE</b></figcaption>
+        </figure>
+      </article>
+
+
+      <article class="module">
+        <div class="idx">02<small><span class="en">Multi-round analysis</span><span class="zh">多回合分析</span></small></div>
+        <div class="copy">
+          <div class="tagline"><span class="en">Patterns, not single rounds</span><span class="zh">看规律，不只看单回合</span></div>
+          <h3><span class="en">Overlay every round that matches</span><span class="zh">叠加所有符合条件的回合</span></h3>
+          <ul>
+            <li><span class="en">Filter by map, side, economy, opening and players.</span><span class="zh">按地图、阵营、经济、开局和玩家筛选。</span></li>
+            <li><span class="en">Dwell, reach, scoped, kill and death heatmaps, with the sample size shown.</span><span class="zh">停留、可达、开镜、击杀、死亡热力图，并标明样本量。</span></li>
+            <li><span class="en">Grenade clustering by type, side and floor. Compare your matches with pro reference demos.</span><span class="zh">按类型、阵营、楼层聚类道具落点；把你的比赛与职业 demo 对照。</span></li>
+            <li><span class="en">Ask the Agent to explain the selection (Mode C), and every claim links back to a playable clip.</span><span class="zh">让 Agent 解读当前筛选（模式 C），每条结论都能跳回可播放的片段。</span></li>
+          </ul>
+        </div>
+        <figure class="frame">
+          <img src="../images/heatmap.png" loading="lazy" alt="Heatmap overlay across many rounds">
+          <figcaption><span><span class="en">Gaussian-smoothed density</span><span class="zh">高斯平滑密度</span></span><b>N ROUNDS</b></figcaption>
+        </figure>
+      </article>
+
+      <article class="module">
+        <div class="idx">03<small><span class="en">Tactic room</span><span class="zh">战术室</span></small></div>
+        <div class="copy">
+          <div class="tagline"><span class="en">Plan it, then play it</span><span class="zh">先规划，再演示</span></div>
+          <h3><span class="en">A board that turns into a round</span><span class="zh">会动起来的战术板</span></h3>
+          <ul>
+            <li><span class="en">A personal library of tactics with tags, folders and notes.</span><span class="zh">个人战术库，支持标签、文件夹和备注。</span></li>
+            <li><span class="en">Multi-stage board with players, routes, smokes, flashes, molotovs, HE, arrows and text, on both floors.</span><span class="zh">多阶段战术板：队员、路线、烟闪火雷、箭头和文字，支持上下层。</span></li>
+            <li><span class="en">Press Play to animate the stages in the same engine as real demos, or start a plan from any moment of a real match.</span><span class="zh">点击演示，用真实 demo 的回放引擎播放方案；也可以从比赛的任意时刻开始规划。</span></li>
+          </ul>
+        </div>
+        <figure class="frame">
+          <img src="../images/board.png" loading="lazy" alt="Tactic board playing back a planned execute">
+          <figcaption><span><span class="en">Stage playback</span><span class="zh">阶段演示</span></span><b>▶ PLAY</b></figcaption>
+        </figure>
+      </article>
+
+      <article class="module noimg">
+        <div class="idx">04<small><span class="en">My career</span><span class="zh">我的生涯</span></small></div>
+        <div class="copy">
+          <div class="tagline"><span class="en">Your Steam account, tracked</span><span class="zh">绑定 Steam，持续追踪</span></div>
+          <h3><span class="en">Sign in once, and new matches import themselves</span><span class="zh">登录一次，新比赛自动导入</span></h3>
+          <div class="two">
+            <ul>
+              <li><span class="en">Steam sign-in (OpenID). New share codes are detected and demos in your replays folder are imported automatically.</span><span class="zh">Steam 登录（OpenID）；自动识别新的分享码，并导入本地录像目录中的 demo。</span></li>
+              <li><span class="en">Jump from any match straight into its replay.</span><span class="zh">从任意比赛一键跳转到回放。</span></li>
+            </ul>
+            <ul>
+              <li><span class="en">Rating 1.0 and an approximate Rating 2.0, ADR capped at the victim's remaining HP, KAST with 5-second trades, opening duels and HS%.</span><span class="zh">Rating 1.0 与近似 Rating 2.0；ADR 按受害者剩余血量封顶；KAST 计入 5 秒内补枪；首杀对决与爆头率。</span></li>
+              <li><span class="en">Every screen switches between 中文 and English, and Agent answers follow the selected language.</span><span class="zh">所有界面一键切换中文 / English，Agent 回答跟随所选语言。</span></li>
+            </ul>
+          </div>
+        </div>
+      </article>
+      <article class="module">
+        <div class="idx">05<small><span class="en">Utility lab</span><span class="zh">道具实验室</span></small></div>
+        <div class="copy">
+          <div class="tagline"><span class="en">Find a lineup with physics</span><span class="zh">用物理找投掷点</span></div>
+          <h3><span class="en">Click where you stand and where it lands</span><span class="zh">点选站位和落点</span></h3>
+          <ul>
+            <li><span class="en">Searches standing, jump, W-jump, crouch-jump and run-jump throws against the map's real collision geometry.</span><span class="zh">基于地图真实碰撞几何，搜索站投、跳投、W 跳投、蹲跳投和助跑投。</span></li>
+            <li><span class="en">Returns aim angles, flight time, bounces and a <span class="mono">setpos/setang</span> command to practise in game.</span><span class="zh">给出瞄准角度、飞行时间、反弹次数，以及可在游戏里练习的 <span class="mono">setpos/setang</span> 指令。</span></li>
+          </ul>
+        </div>
+        <figure class="frame">
+          <img src="../images/lab.png" loading="lazy" alt="Utility lab with a computed grenade trajectory">
+          <figcaption><span><span class="en">Trajectory solver · 2D / 3D</span><span class="zh">轨迹求解 · 2D / 3D</span></span><b>SETPOS</b></figcaption>
+        </figure>
+      </article>
+
+      <aside class="exp">
+        <span class="exp-tag"><span class="en">Experimental</span><span class="zh">实验功能</span></span>
+        <p><span class="en"><b>Movement prediction.</b> A small side project for fun: pick a player in the replay and a local GRU guesses where they will be 0.5–2 s later, drawn next to the real track. It is a toy, not a coaching tool.</span><span class="zh"><b>移动预测。</b>一个好玩的小实验：在回放中选一名玩家，本地 GRU 猜他 0.5–2 秒后的位置，并和真实轨迹画在一起。仅供娱乐，不作为训练建议。</span></p>
+      </aside>
+    </div>
+  </section>
+
+  <section id="pipeline">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="eyebrow"><b>■</b> <span class="en">How it works</span><span class="zh">工作原理</span></div>
+        <div>
+          <h2><span class="en">From .dem to a workspace, on your own machine</span><span class="zh">从 .dem 到工作台，全在你的电脑上</span></h2>
+          <p><span class="en">Each demo is parsed once into a per-match cache. Everything after that reads from the cache.</span><span class="zh">每个 demo 只解析一次，生成单场缓存，之后的功能都从缓存读取。</span></p>
+        </div>
+      </div>
+      <div class="pipe">
+        <div><div class="t">STAGE 1</div><h4><span class="en">Demo files</span><span class="zh">Demo 文件</span></h4><p><span class="en">Uploads, your Steam replays folder, pro demos.</span><span class="zh">上传、Steam 录像目录、职业比赛 demo。</span></p></div>
+        <div><div class="t">STAGE 2</div><h4><span class="en">Parser</span><span class="zh">解析</span></h4><p><span class="en">demoparser2 on Node.</span><span class="zh">基于 Node 的 demoparser2。</span></p></div>
+        <div><div class="t">STAGE 3</div><h4><span class="en">Match cache</span><span class="zh">单场缓存</span></h4><p><span class="en">16 Hz tracks, grenades, economy, names.</span><span class="zh">16 Hz 轨迹、道具、经济、选手名。</span></p></div>
+        <div><div class="t">STAGE 4</div><h4><span class="en">Local server</span><span class="zh">本地服务</span></h4><p><span class="mono" style="font-size:12px">Python · 127.0.0.1:8790</span></p></div>
+        <div><div class="t">STAGE 5</div><h4><span class="en">Web UI</span><span class="zh">网页界面</span></h4><p><span class="en">Replay, analysis, tactic room, career, lab.</span><span class="zh">回放、分析、战术室、生涯、实验室。</span></p></div>
+      </div>
+      <div class="side">
+        <span><b>+</b> <span class="en">Movement GRU · experimental</span><span class="zh">移动预测 GRU · 实验性</span></span>
+        <span><b>+</b> <span class="en">Map collision and radar from your CS2 install</span><span class="zh">地图碰撞与雷达图来自本机 CS2</span></span>
+        <span><b>⇢</b> <span class="en">LLM Agent · evidence packet in, audited findings out</span><span class="zh">LLM Agent · 输入证据包，输出经审核的发现</span></span>
+      </div>
+    </div>
+  </section>
+
+  <section id="rules">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="eyebrow"><b>■</b> <span class="en">Flight rules</span><span class="zh">飞行守则</span></div>
+        <div><h2><span class="en">Privacy and trust</span><span class="zh">隐私与可信度</span></h2></div>
+      </div>
+      <div class="rules">
+        <div><div class="k">RULE 1 · GO</div><h4><span class="en">Local by default</span><span class="zh">默认本地</span></h4><p><span class="en">The server binds to <code>127.0.0.1</code>, checks Host and Origin, and requires a session token for every write.</span><span class="zh">服务只监听 <code>127.0.0.1</code>，校验 Host / Origin，所有写操作都需要会话令牌。</span></p></div>
+        <div><div class="k">RULE 2 · GO</div><h4><span class="en">Your keys stay yours</span><span class="zh">密钥留在本机</span></h4><p><span class="en">The Steam Web API key is stored locally and never sent back by the API.</span><span class="zh">Steam API Key 保存在本地，接口不会把它返回。</span></p></div>
+        <div><div class="k">RULE 3 · GO</div><h4><span class="en">No silent model calls</span><span class="zh">不偷偷调用模型</span></h4><p><span class="en">The LLM runs only when you click, and each run has a call budget.</span><span class="zh">只有点击后才调用 LLM，每次都有调用上限。</span></p></div>
+        <div><div class="k">RULE 4 · GO</div><h4><span class="en">Honest outputs</span><span class="zh">结果诚实</span></h4><p><span class="en">Model results are labelled, inferences are kept apart from observed facts, and validation reports include the failures.</span><span class="zh">模型输出明确标注，推断与观测事实分开，验证报告包含失败案例。</span></p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="launch">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="eyebrow"><b>■</b> <span class="en">Quick start</span><span class="zh">快速开始</span></div>
+        <div><h2><span class="en">Launch sequence</span><span class="zh">启动流程</span></h2></div>
+      </div>
+      <div class="launch">
+        <div>
+          <ul class="req">
+            <li><span class="en">OS</span><span class="zh">系统</span><b>Windows</b></li>
+            <li>Python<b>≥ 3.12</b></li>
+            <li>Node<b>≥ 22</b></li>
+            <li><span class="en">CS2 install</span><span class="zh">本机 CS2</span><b><span class="en">radar + icons</span><span class="zh">雷达图与图标</span></b></li>
+            <li><span class="en">LLM endpoint</span><span class="zh">模型服务</span><b><span class="en">optional</span><span class="zh">可选</span></b></li>
+          </ul>
+          <p class="after"><span class="en">Then open <code>http://127.0.0.1:8790</code>, upload a <code>.dem</code> or link Steam, and open the match.</span><span class="zh">然后打开 <code>http://127.0.0.1:8790</code>，上传 <code>.dem</code> 或绑定 Steam，打开比赛即可。</span></p>
+        </div>
+        <div class="term">
+          <div class="term-bar"><span>POWERSHELL</span><button type="button" id="copy-cmd"><span class="en">Copy</span><span class="zh">复制</span></button></div>
+<pre id="cmd"><span class="p">&gt;</span> python -m venv .venv
+<span class="p">&gt;</span> ./.venv/Scripts/python.exe -m pip install -e ".[test]"
+<span class="p">&gt;</span> ./.venv/Scripts/python.exe -m pip install -r requirements-training.txt  <span class="c"># PyTorch</span>
+<span class="p">&gt;</span> npm install --prefix outputs/cs2-coach-prototype  <span class="c"># demo parser</span>
+<span class="p">&gt;</span> ./start-tactics.ps1</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>CS2 ANALYSIS AGENT · <span class="en">Local-first demo lab</span><span class="zh">本地 demo 实验室</span></span>
+    <a href="https://github.com/ethany14/CS2-analysis-agent" target="_blank" rel="noopener">github.com/ethany14/CS2-analysis-agent ↗</a>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var root=document.documentElement, zh=document.getElementById('lang-zh'), en=document.getElementById('lang-en');
+  function set(l){
+    root.classList.toggle('zh',l==='zh'); root.lang=l==='zh'?'zh-CN':'en';
+    zh.setAttribute('aria-pressed',l==='zh'); en.setAttribute('aria-pressed',l!=='zh');
+    try{localStorage.setItem('cs2-lang',l)}catch(e){}
+  }
+  var saved=null; try{saved=localStorage.getItem('cs2-lang')}catch(e){}
+  set(saved||((navigator.language||'').toLowerCase().indexOf('zh')===0?'zh':'en'));
+  zh.onclick=function(){set('zh')}; en.onclick=function(){set('en')};
+  var btn=document.getElementById('copy-cmd');
+  btn.onclick=function(){
+    var text=document.getElementById('cmd').innerText.split('\n').map(function(s){return s.replace(/^>\s?/,'').replace(/\s+#.*$/,'')}).join('\n');
+    function done(){btn.querySelector('.en').textContent='Copied';btn.querySelector('.zh').textContent='已复制'}
+    function fallback(){var r=document.createRange();r.selectNodeContents(document.getElementById('cmd'));var s=getSelection();s.removeAllRanges();s.addRange(r)}
+    try{navigator.clipboard.writeText(text).then(done,fallback)}catch(e){fallback()}
+  };
+})();
+</script>
+
+</body>
+</html>
