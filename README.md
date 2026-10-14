@@ -4,7 +4,7 @@
 
 **Demo analysis for Counter-Strike 2: replay any match, let an AI analyst explain it with evidence,<br>study patterns across rounds and plan tactics. Runs on your own machine.**
 
-[English](#english) · [中文](#中文)
+**[Website](https://ethany14.github.io/Cs2-Roundcrafter/)** · [English](#english) · [中文](#中文)
 
 ![Round review](docs/images/replay.png)
 
@@ -135,6 +135,8 @@ $env:PYTHONPATH='backend'; ./.venv/Scripts/python.exe -m pytest -q
 <div align="center">
 
 **RoundCrafter：本地运行的 CS2 demo 分析工具。回放比赛，让 AI 分析师基于证据解读，<br>跨回合找规律、规划战术。**
+
+**[产品网站](https://ethany14.github.io/Cs2-Roundcrafter/)**
 
 ![单回合复盘](docs/images/replay-zh.png)
 
