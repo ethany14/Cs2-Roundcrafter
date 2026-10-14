@@ -79,12 +79,13 @@ class ConfiguredModel:
         self.native = self.config.get("protocol") == "anthropic"
         if self.native:
             self.client = anthropic_client(self.config, timeout=self.request_timeout, transport=transport)
+            self.conversation = AnthropicConversation()
         else:
             self.client = httpx.Client(timeout=self.request_timeout, follow_redirects=False, transport=transport)
 
     def invoke(self, messages, tools):
         if self.native:
-            return invoke_anthropic(self.client, self.config, messages, tools)
+            return invoke_anthropic(self.client, self.config, messages, tools, self.conversation)
         config = self.config
         payload = {"model": config["LLM_MODEL_ID"], "messages": wire_messages(messages),
                    "stream": False,
@@ -164,11 +165,10 @@ def _content_blocks(content):
 
 
 def anthropic_messages(messages):
-    """LangChain messages -> (system, Messages API turns).
+    """LangChain messages -> (system, Messages API turns), rebuilt from the agent loop's history.
 
-    The agent loop rebuilds its history on every call, so earlier turns are not byte-identical
-    between requests. Thinking blocks are therefore never replayed: each turn's text and tool_use
-    blocks are kept, which is the documented strip-thinking form and avoids prefix-binding errors.
+    The rebuilt form carries no thinking blocks. AnthropicConversation keeps the replayable,
+    append-only transcript; this form is the starting point and the fallback.
     """
     system, turns = [], []
 
@@ -218,31 +218,105 @@ def anthropic_tools(tools):
             for t in tools or []]
 
 
-def invoke_anthropic(client, config, messages, tools):
-    system, turns = anthropic_messages(messages)
-    params = {"model": config["LLM_MODEL_ID"], "max_tokens": config["max_tokens"], "messages": turns}
+# Models that take adaptive thinking (and the block_binding control) on the Messages API.
+ADAPTIVE_MODELS = {"claude-fable-5-1", "claude-fable-5", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5",
+                   "claude-sonnet-5", "claude-haiku-5-5", "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6",
+                   "claude-sonnet-4-6"}
+
+
+def _signature(turns):
+    """Conversation shape without text: roles and the tool_use / tool_result IDs in each turn."""
+    return [(t["role"], tuple(b["id"] for b in t["content"] if b.get("type") == "tool_use"),
+             tuple(b["tool_use_id"] for b in t["content"] if b.get("type") == "tool_result")) for t in turns]
+
+
+class AnthropicConversation:
+    """Append-only transcript for one agent run, so Claude's thinking blocks stay valid.
+
+    The agent loop rebuilds history on every call (the previous observation is replaced by a short
+    "historical_request" note). A thinking block is bound to the exact prefix it was produced under,
+    so replaying it inside rebuilt history would be rejected. Instead this keeps what was actually sent,
+    plus each response's content blocks verbatim, and appends only the new tool results and the new
+    observation. When the loop's history no longer matches (a discarded or repaired turn, a changed
+    system prompt or tool set, or a transcript that has grown too large) it starts again from the rebuilt
+    form, which carries no thinking.
+    """
+    MAX_BYTES = 400_000
+
+    def __init__(self):
+        self.system, self.tools, self.turns, self.restarts = None, None, [], 0
+
+    def reset(self):
+        self.system, self.tools, self.turns = None, None, []
+
+    def request(self, system, tools, rebuilt):
+        if self.turns and system == self.system and tools == self.tools and len(rebuilt) >= 2 and rebuilt[-1]["role"] == "user":
+            shape = _signature(rebuilt[:-1])
+            # k=0: the last response was acted on. k=2: the loop discarded the last response
+            # (repair or stale revision), so continue from the turn before it; truncating the end
+            # of the transcript leaves every earlier prefix, and its thinking blocks, unchanged.
+            for k in (0, 2):
+                base = self.turns[:len(self.turns) - k]
+                if base and base[-1]["role"] == "assistant" and _signature(base) == shape:
+                    candidate = base + [rebuilt[-1]]
+                    if len(json.dumps(candidate, ensure_ascii=False).encode("utf-8")) <= self.MAX_BYTES:
+                        self.turns = candidate
+                        return self.turns
+                    break
+        if self.turns:
+            self.restarts += 1
+        self.system, self.tools, self.turns = system, tools, list(rebuilt)
+        return self.turns
+
+    def record(self, response):
+        self.turns = self.turns + [{"role": "assistant", "content": [b.to_dict() for b in response.content]}]
+
+
+def invoke_anthropic(client, config, messages, tools, conversation=None):
+    system, rebuilt = anthropic_messages(messages)
+    tool_defs = anthropic_tools(tools)
+    conversation = conversation or AnthropicConversation()
+    turns = conversation.request(system, tool_defs, rebuilt)
+    model_id = config["LLM_MODEL_ID"]
+    official = urlsplit(config["LLM_BASE_URL"]).hostname == "api.anthropic.com"
+    # Append-only history keeps the prefix stable, so automatic prompt caching pays off.
+    params = {"model": model_id, "max_tokens": config["max_tokens"], "messages": turns}
+    if official:
+        params["cache_control"] = {"type": "ephemeral"}
     if system:
         params["system"] = system
-    if tools:
-        params["tools"] = anthropic_tools(tools)
+    if tool_defs:
+        params["tools"] = tool_defs
         params["tool_choice"] = {"type": "auto"}
     if config.get("LLM_AGENT_REASONING"):
         params["output_config"] = {"effort": config["LLM_AGENT_REASONING"]}
-    if len(json.dumps(params, ensure_ascii=False).encode("utf-8")) > 200_000:
+    betas = []
+    if official and model_id in ADAPTIVE_MODELS:
+        # Safety net: if a replayed thinking block no longer matches its prefix, drop it instead of failing.
+        params["thinking"] = {"type": "adaptive", "block_binding": {"prefix_mismatch_behavior": "drop_block"}}
+        betas.append("thinking-binding-controls-2026-08-01")
+    if official and model_id in FALLBACK_MODELS:
+        # A safety-classifier decline is re-run server-side on Anthropic's recommended model.
+        params["fallbacks"] = "default"
+        betas.append("server-side-fallback-2026-07-01")
+    if len(json.dumps(params, ensure_ascii=False).encode("utf-8")) > 600_000:
         raise ValueError("Model request exceeds local size limit")
-    official = urlsplit(config["LLM_BASE_URL"]).hostname == "api.anthropic.com"
-    with provider_call(config["LLM_MODEL_ID"], input_token_reservation=input_reservation(params)) as details:
-        if official and config["LLM_MODEL_ID"] in FALLBACK_MODELS:
-            # A safety-classifier decline is re-run server-side on Anthropic's recommended model.
-            response = client.beta.messages.create(**params, betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+    with provider_call(model_id, input_token_reservation=input_reservation(params)) as details:
+        if betas:
+            response = client.beta.messages.create(**params, betas=betas)
         else:
             response = client.messages.create(**params)
         usage = response.usage
         details.update(token_counts({"input_tokens": (usage.input_tokens or 0) + (getattr(usage, "cache_read_input_tokens", 0) or 0)
                                      + (getattr(usage, "cache_creation_input_tokens", 0) or 0),
-                                     "output_tokens": usage.output_tokens}))
+                                     "output_tokens": usage.output_tokens,
+                                     "input_token_details": {"cache_read": getattr(usage, "cache_read_input_tokens", 0) or 0}}))
     if response.stop_reason == "refusal":
+        conversation.reset()
         raise RuntimeError("模型拒绝了这个请求（refusal）")
+    conversation.record(response)
+    dropped = [t for t in (getattr(response, "input_transformations", None) or [])
+               if getattr(t, "type", None) == "thinking_dropped"]
     text = "\n".join(b.text for b in response.content if b.type == "text").strip()
     calls, ids = [], set()
     for block in response.content:
@@ -253,4 +327,5 @@ def invoke_anthropic(client, config, messages, tools):
             calls.append({"id": block.id, "name": block.name, "args": dict(block.input or {})})
     return AIMessage(content=text, tool_calls=calls,
                      response_metadata={"finish_reason": STOP_REASONS.get(response.stop_reason, response.stop_reason),
-                                        "stop_reason": response.stop_reason})
+                                        "stop_reason": response.stop_reason, "thinking_dropped": len(dropped),
+                                        "history_restarts": conversation.restarts})

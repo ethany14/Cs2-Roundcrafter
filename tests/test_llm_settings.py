@@ -120,25 +120,87 @@ def test_anthropic_without_fallback_off_the_official_host_and_truncation_flagged
     assert reply.response_metadata["finish_reason"] == "length"
 
 
-def test_anthropic_path_runs_the_agent_loop(tmp_path):
-    calls = []
+def scripted(calls, final_after=3):
+    """Mock Messages API: each reply has a thinking block (with a signature) and one tool call."""
     def respond(request):
         body = json.loads(request.content)
-        calls.append(body)
-        name = "inspect_capabilities" if len(calls) == 1 else "finish_task"
-        return httpx2.Response(200, json={"id": f"m{len(calls)}", "type": "message", "role": "assistant", "model": body["model"],
-            "content": [{"type": "tool_use", "id": f"toolu_{len(calls)}", "name": name,
+        calls.append((request, body))
+        n = len(calls)
+        name = "inspect_capabilities" if n < final_after else "finish_task"
+        return httpx2.Response(200, json={"id": f"m{n}", "type": "message", "role": "assistant", "model": body["model"],
+            "content": [{"type": "thinking", "thinking": "", "signature": f"sig-{n}"},
+                        {"type": "tool_use", "id": f"toolu_{n}", "name": name,
                          "input": {} if name == "inspect_capabilities" else {"text": "done"}}],
             "stop_reason": "tool_use", "stop_sequence": None, "usage": {"input_tokens": 100, "output_tokens": 20}})
-    model = ConfiguredModel(anthropic_config(), transport=httpx2.MockTransport(respond))
+    return httpx2.MockTransport(respond)
+
+
+def test_anthropic_agent_loop_history_is_append_only_with_thinking(tmp_path):
+    calls = []
+    model = ConfiguredModel(anthropic_config(), transport=scripted(calls))
     host = WorkspaceHost(tmp_path, model, foundation_tools(), request="check")
     try:
         assert host.run()["reason"] == "completed"
-        second = calls[1]["messages"]
-        results = [b for turn in second if turn["role"] == "user" for b in turn["content"] if b["type"] == "tool_result"]
-        assert results and results[0]["tool_use_id"] == "toolu_1"
-        assert not any(b.get("type") == "thinking" for turn in second for b in turn["content"])
+        assert len(calls) == 3
+        for i in (1, 2):
+            before, after = calls[i - 1][1], calls[i][1]
+            # Each request is the previous one, plus the reply verbatim, plus one new user turn.
+            assert after["messages"][:len(before["messages"])] == before["messages"]
+            reply = after["messages"][len(before["messages"])]
+            assert reply == {"role": "assistant", "content": [
+                {"type": "thinking", "thinking": "", "signature": f"sig-{i}"},
+                {"type": "tool_use", "id": f"toolu_{i}", "name": "inspect_capabilities", "input": {}}]}
+            assert after["system"] == before["system"] and after["tools"] == before["tools"]
+            new = after["messages"][-1]["content"]
+            assert new[0] == {"type": "tool_result", "tool_use_id": f"toolu_{i}", "content": new[0]["content"]}
+        request, body = calls[2]
+        assert body["thinking"] == {"type": "adaptive", "block_binding": {"prefix_mismatch_behavior": "drop_block"}}
+        assert body["cache_control"] == {"type": "ephemeral"}
+        assert {"thinking-binding-controls-2026-08-01", "server-side-fallback-2026-07-01"} <= set(request.headers["anthropic-beta"].split(","))
         assert SECRET not in host.path.read_text(encoding="utf-8")
     finally:
         host.close()
         model.close()
+
+
+def turn(snapshot, *exchanges):
+    """LangChain messages the way the agent loop rebuilds them."""
+    out = [SystemMessage(content="rules")]
+    if exchanges:
+        out.append(HumanMessage(content="historical request"))
+    for call_id in exchanges:
+        out += [AIMessage(content="", tool_calls=[{"id": call_id, "name": "inspect_capabilities", "args": {}}]),
+                ToolMessage(content='{"ok":1}', tool_call_id=call_id)]
+    return out + [HumanMessage(content=snapshot)]
+
+
+def test_discarded_reply_continues_from_the_turn_before():
+    calls = []
+    model = ConfiguredModel(anthropic_config(), transport=scripted(calls, final_after=9))
+    try:
+        model.invoke(turn("obs 1"), [])
+        model.invoke(turn("obs 2", "toolu_1"), [])
+        # The loop rejected reply 2 (say, truncated) and asks again with the same history.
+        reply = model.invoke(turn("obs 3 with repair note", "toolu_1"), [])
+    finally:
+        model.close()
+    messages = calls[2][1]["messages"]
+    assert [m["role"] for m in messages] == ["user", "assistant", "user"]
+    assert messages[1]["content"][0] == {"type": "thinking", "thinking": "", "signature": "sig-1"}
+    assert messages[2]["content"][-1]["text"] == "obs 3 with repair note"
+    assert reply.response_metadata["history_restarts"] == 0
+
+
+def test_changed_system_prompt_restarts_without_thinking():
+    calls = []
+    model = ConfiguredModel(anthropic_config(), transport=scripted(calls, final_after=9))
+    try:
+        model.invoke(turn("obs 1"), [])
+        changed = turn("obs 2", "toolu_1")
+        changed[0] = SystemMessage(content="different rules")
+        reply = model.invoke(changed, [])
+    finally:
+        model.close()
+    messages = calls[1][1]["messages"]
+    assert not any(b["type"] == "thinking" for m in messages for b in m["content"])
+    assert reply.response_metadata["history_restarts"] == 1
