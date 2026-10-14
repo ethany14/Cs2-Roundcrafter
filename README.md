@@ -20,7 +20,7 @@
 
 <a id="english"></a>
 
-RoundCrafter turns your CS2 `.dem` files into a lab you can study. The AI analyst is the center of it. Around it sit a broadcast-style replay, multi-round heatmaps, a tactic room, your Steam career and a utility lab. Everything runs on your own machine; the only thing that leaves it is the anonymised evidence you choose to send to your model.
+RoundCrafter turns your CS2 `.dem` files into a lab you can study. The AI analyst is the center of it. Around it sit a broadcast-style replay, multi-round heatmaps, a tactic room, your Steam career and a utility lab. Everything runs on your own machine. Only two things reach the network, and only when you start them: the anonymised evidence you send to your model, and lineup research reading public web pages.
 
 ## Agent analysis: an analyst that shows its evidence
 
@@ -62,6 +62,21 @@ Each run is capped: a round read gets up to 5 calls, a 50k input-token limit and
 - **Facts apart from guesses.** Each finding separates facts, inference, uncertainty and a recommendation.
 - **Anonymised players.** The model sees P1–P10. Names and SteamIDs stay on your machine, and a test enforces it.
 - **Your model, your language.** Pick Claude, GPT, Gemini, DeepSeek, Qwen, Kimi, GLM, Grok, Mistral, OpenRouter, Groq or a local Ollama model, and paste your key in the app. Answers follow the 中文 / English switch.
+
+### Retrieval: grounded in real sources
+
+The Agent does not answer from memory. Before it explains anything, RoundCrafter retrieves comparable material from its own libraries, and the Agent's findings have to point back to what was retrieved. Retrieval is transparent on purpose: SQL filters, BM25-style keyword ranking and hand-tuned similarity, no embeddings, so you can always see why something matched.
+
+| Library | What it holds | How it is matched | Used by |
+|---|---|---|---|
+| **Pro rounds** | Rounds from the pro demos you import. A demo counts as verified only when its file fingerprint matches a curated source list; otherwise it is marked "declared, unverified". | Same map, side, target site and phase, alive count within 2, overlapping approach routes; ranked on route overlap, economy and timing. No model call. | Pro comparison: every finding must cite evidence from both rounds. |
+| **Pro casebook** | The 2 s before each death in pro matches, split into reference and test matches. | Exact match on players alive and bomb state, then distance on positions, time, equipment and teammate spacing. Only what happened before the event, never the outcome. | `retrieve_pro_cases` in case review; the Agent must read a reference before it can finish. |
+| **Tactic cards** | Tactic library entries (map, side, economy, video source) in SQLite. | Map/side/economy filter, then BM25-style ranking with Chinese↔English tactic terms. Prerequisites such as player count or utility are checked; missing ones stay "unknown", never assumed. | `retrieve_tactic_cards`; the model may only pick up to 3 card IDs, never free text. |
+| **Reviewed notes** | Utility and tactic notes with an https source and an explicit review flag. | SQLite full-text search over reviewed rows only. | `search_tactical_knowledge`: an empty result means no verified knowledge, and the model is told not to invent it. |
+| **Your case library** | Claims from your finished Agent reviews whose evidence IDs still resolve. | Keyword and Chinese-bigram overlap, title weighted. | Search past findings from the review page. |
+| **Lineup research** | Local lineup cards first, then web pages and YouTube / Bilibili captions, only when you start it. | Hard filters on grenade type and destination; a field is accepted only if it is quoted verbatim from a page that was actually read. Search/read budgets and a 7-day cache. | `start_lineup_research` in the tactics assistant. |
+
+Retrieved is not the same as verified: tactic cards are learning references, lineups stay "unverified in game", and Agent claims stay labelled as model inference.
 
 ## The workspace around the Agent
 
@@ -113,7 +128,9 @@ flowchart LR
   B --> C["Match cache<br/>16 Hz tracks · grenades · economy · names"]
   C --> D["Local server<br/>Python · 127.0.0.1:8790"]
   D --> E["Web UI<br/>replay · analysis · tactic room · career · lab"]
-  D -- "evidence packet<br/>P1–P10, IDs" --> L["LLM Agent<br/>your provider, on click"]
+  D --> R["Local retrieval<br/>pro rounds · pro casebook · tactic cards · notes"]
+  R -- "evidence packet<br/>P1–P10, IDs" --> L["LLM Agent<br/>your provider, on click"]
+  W["Lineup sources<br/>web · YouTube · Bilibili · on click"] -.-> L
   L -- "findings citing IDs" --> U["Local audit"] --> E
   G["Map collision + radar<br/>from your CS2 install"] --> D
   M["Movement GRU<br/>experimental"] -.-> D
@@ -124,6 +141,7 @@ flowchart LR
 - **Local by default.** The server binds to `127.0.0.1`, checks Host and Origin, and requires a session token for every write.
 - **Your keys stay yours.** You enter the Steam Web API key and the model API key in the app. They are stored in `data/account/` on your machine and never sent back by the API.
 - **No silent model calls.** The LLM runs only when you click, and each run has a call budget.
+- **No silent web access.** Lineup research reads public pages and videos only when you start it, with fixed search and read budgets.
 - **Honest outputs.** Model results are labelled, inferences are kept apart from observed facts, and the validation reports in `outputs/` include the failures.
 
 ## Quick start
@@ -152,7 +170,7 @@ Then open **http://127.0.0.1:8790**, upload a `.dem` or link Steam, and open the
 ## Project layout
 
 ```
-backend/cs2_agent/   server, demo processing, agents, model settings, stats, Steam hub, tactic room
+backend/cs2_agent/   server, demo processing, agents, retrieval, model settings, stats, Steam hub, tactic room
 backend/eregion/     AgentLoop runtime
 web/                 UI: replay engine, analysis workbench, tactic board, lab
 experiments/         demo extraction scripts and the movement-model training code
@@ -187,7 +205,7 @@ $env:PYTHONPATH='backend'; ./.venv/Scripts/python.exe -m pytest -q
 
 </div>
 
-RoundCrafter 把你的 CS2 `.dem` 变成可以研究的实验室。核心是 AI 分析师，配套有转播级回放、多回合热力图、战术室、Steam 生涯和道具实验室。全部计算都在你自己的电脑上完成，唯一离开本机的，是你选择发送给模型的匿名证据。
+RoundCrafter 把你的 CS2 `.dem` 变成可以研究的实验室。核心是 AI 分析师，配套有转播级回放、多回合热力图、战术室、Steam 生涯和道具实验室。全部计算都在你自己的电脑上完成。只有两件事会联网，而且都要你主动启动：发送给模型的匿名证据，以及投掷点研究读取公开网页。
 
 ### Agent 分析：会出示证据的 AI 分析师
 
@@ -229,6 +247,21 @@ Agent 不直接“看” demo。服务端先从解析结果生成**证据包**�
 - **事实与推断分开：** 每条发现分为事实、推断、不确定性和建议。
 - **选手匿名：** 模型只看到 P1–P10，选手名和 SteamID 留在本机，并有测试保证。
 - **自选模型与语言：** 可选 Claude、GPT、Gemini、DeepSeek、通义千问、Kimi、GLM、Grok、Mistral、OpenRouter、Groq 或本地 Ollama 模型，在应用内粘贴密钥即可；回答跟随中 / 英切换。
+
+#### 检索：基于真实资料作答
+
+Agent 不凭记忆回答。解读之前，RoundCrafter 会先从自己的资料库检索可比的材料，Agent 的结论必须指回检索到的内容。检索过程刻意保持透明：SQL 过滤、BM25 式关键词排序和人工设定的相似度，不使用向量嵌入，因此每条匹配都能说清原因。
+
+| 资料库 | 内容 | 匹配方式 | 用在哪里 |
+|---|---|---|---|
+| **职业回合** | 你导入的职业比赛 demo 中的回合。只有文件指纹与人工整理的来源列表一致才算已核验，否则标为“上传者声明，未核验”。 | 同地图、同阵营、同目标包点和阶段，存活人数相差不超过 2，进攻路线有重叠；再按路线重合度、经济和时间排序。不调用模型。 | 职业对照：每条发现都必须同时引用两个回合的证据。 |
+| **职业案例库** | 职业比赛中每次死亡前 2 秒的情境，按比赛分为参考集和测试集。 | 存活人数和下包状态完全一致，再按站位、时间、装备和队友距离计算相似度。只用事件发生前的信息，从不使用结果。 | 案例复盘中的 `retrieve_pro_cases`；Agent 必须先读过参考案例才能结束。 |
+| **战术卡片** | 战术库条目（地图、阵营、经济、视频来源），存于 SQLite。 | 先按地图、阵营、经济过滤，再用 BM25 式排序，支持中英战术术语对照。会检查人数、道具等前提，缺失的前提保持“未知”，从不默认满足。 | `retrieve_tactic_cards`；模型最多只能选 3 个卡片编号，不能写自由文本。 |
+| **已审核笔记** | 带 https 来源且明确标记为已审核的道具与战术笔记。 | 只在已审核条目上做 SQLite 全文检索。 | `search_tactical_knowledge`：结果为空即表示没有经核实的知识，并明确要求模型不要编造。 |
+| **你的案例库** | 已完成的 Agent 复盘中、证据编号仍可对应的结论。 | 关键词与中文二元组重叠，标题加权。 | 在复盘页搜索过往发现。 |
+| **投掷点研究** | 先查本地投掷点卡片，你启动后再查网页和 YouTube / B 站字幕。 | 按道具类型和落点硬过滤；字段必须逐字引自真正读过的页面才会被采纳。有搜索/阅读预算和 7 天缓存。 | 战术助手中的 `start_lineup_research`。 |
+
+检索到不等于已验证：战术卡片只是学习参考，投掷点保持“未经游戏内验证”，Agent 的结论始终标注为模型推断。
 
 ### 围绕 Agent 的工作台
 
@@ -272,13 +305,14 @@ Agent 不直接“看” demo。服务端先从解析结果生成**证据包**�
 
 ### 工作原理
 
-每个 demo 只解析一次，生成单场缓存，之后的功能都从缓存读取，全部在你的电脑上：demo 文件 → 解析 → 单场缓存 → 本地服务 → 网页界面。点击分析后，本地服务把匿名证据包（P1–P10、证据编号）发给你选择的模型，返回的发现经本地审核后显示在界面上。流程图见英文部分的 [How it works](#how-it-works)。
+每个 demo 只解析一次，生成单场缓存，之后的功能都从缓存读取，全部在你的电脑上：demo 文件 → 解析 → 单场缓存 → 本地服务 → 网页界面。点击分析后，本地服务先从本地资料库检索可比材料，再把匿名证据包（P1–P10、证据编号）发给你选择的模型，返回的发现经本地审核后显示在界面上。流程图见英文部分的 [How it works](#how-it-works)。
 
 ### 隐私与可信度
 
 - **默认本地：** 服务只监听 `127.0.0.1`，校验 Host / Origin，所有写操作都需要会话令牌。
 - **密钥留在本机：** Steam API Key 和模型 API Key 都在应用中填写，保存在本机 `data/account/`，接口不会返回它们。
 - **不偷偷调用模型：** 只有点击后才调用 LLM，每次都有调用上限。
+- **不偷偷联网：** 投掷点研究只在你启动后读取公开网页和视频，搜索与阅读次数都有上限。
 - **结果诚实：** 模型输出明确标注，推断与观测事实分开，`outputs/` 中的验证报告包含失败案例。
 
 ### 快速开始
