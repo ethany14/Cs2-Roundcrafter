@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from threading import Event
 
-from eregion.runtime.core.engine import AgentLoop, LoopStop, Turn
+from eregion.runtime.core.engine import AgentLoop, LoopStop, Turn, validate_call
 from eregion.runtime.core.model import ModelRequests
 from eregion.runtime.provider_usage import UsageLedger, usage_scope
 from eregion.runtime.storage import Base
@@ -43,9 +43,8 @@ class WorkspaceHost:
         self.ledger = UsageLedger(sessionmaker(self.engine))
 
     def _save(self):
-        temporary = self.path.with_suffix(".tmp")
-        temporary.write_text(json.dumps(self.state, ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(temporary, self.path)
+        from .lineup_catalog import write_json
+        write_json(self.path, self.state)
 
     def active(self):
         return not self.cancelled.is_set() and self.state["status"] != "completed"
@@ -85,8 +84,25 @@ class WorkspaceHost:
             return {"finished": True, "text": call["args"]["text"]}
         return self.tools[call["name"]].execute(call["args"])
 
+    def validate(self, call, turn):
+        """Repair harmless format slips (see repair_args) before the strict schema check, so a call isn't spent on them."""
+        tools = (turn.allowed_tools if turn.allowed_tools is not None else turn.tools) + turn.compatibility_tools
+        definition = next((t["function"] for t in tools if t["function"]["name"] == call.get("name")), None)
+        if definition is not None and isinstance(call.get("args"), dict):
+            call["args"] = repair_args(call["args"], definition["parameters"])
+        validate_call(call, tools)
+
     def action_error(self, exc):
-        return {"error": type(exc).__name__, "next": "Check the tool schema and current evidence."}
+        # The model must see *why* a call was rejected, otherwise it repeats the same mistake on its next (often last) call.
+        message = str(exc)[:500] or type(exc).__name__
+        self.state.setdefault("tool_errors", []).append({"call": self.state.get("calls", 0), "error": type(exc).__name__, "message": message})
+        self._save()
+        return {"error": type(exc).__name__, "message": message, "next": "Fix exactly this problem and call the tool again."}
+
+    def feedback(self):
+        """For hosts that rebuild the prompt each call: the last rejection, so the retry can fix it."""
+        errors = self.state.get("tool_errors") or []
+        return {"previous_attempt_rejected": errors[-1]["message"]} if errors else {}
 
     def after_action(self, call, outcome, turn):
         if call["name"] == "finish_task" and outcome.get("finished"):
@@ -118,3 +134,40 @@ class WorkspaceHost:
         self.cancelled.set()
         self.requests.close()
         self.engine.dispose()
+
+
+def repair_args(value, rule):
+    """Coerce model arguments toward a JSON schema without inventing content:
+    drop unknown keys, trim over-long strings and arrays, wrap a bare string where a {text} object or a list is expected,
+    and parse numeric strings. Missing required fields and wrong evidence are left for validation to report."""
+    if not isinstance(rule, dict):
+        return value
+    kind = rule.get("type")
+    if kind == "object":
+        props = rule.get("properties", {})
+        if isinstance(value, str):
+            required = rule.get("required", [])
+            if len(required) == 1 and props.get(required[0], {}).get("type") == "string":
+                value = {required[0]: value}
+        if isinstance(value, dict):
+            if rule.get("additionalProperties") is False:
+                value = {k: v for k, v in value.items() if k in props}
+            return {k: repair_args(v, props.get(k, {})) for k, v in value.items()}
+        return value
+    if kind == "array":
+        if isinstance(value, (str, dict)):
+            value = [value]
+        if isinstance(value, list):
+            if "maxItems" in rule:
+                value = value[:rule["maxItems"]]
+            return [repair_args(v, rule.get("items", {})) for v in value]
+        return value
+    if kind == "string" and isinstance(value, str) and "maxLength" in rule and len(value) > rule["maxLength"]:
+        return value[:max(1, rule["maxLength"] - 1)] + "…"
+    if kind in ("number", "integer") and isinstance(value, str):
+        try:
+            number = float(value)
+            return int(number) if kind == "integer" and number.is_integer() else number
+        except ValueError:
+            return value
+    return value

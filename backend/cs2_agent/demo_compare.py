@@ -125,10 +125,10 @@ class CompareHost(WorkspaceHost):
     def __init__(self,payload,directory,model,cancelled,save,lang='zh'):
         self.lang=lang;self.payload=payload;self.callback=save;self.started=time.monotonic();self.result=None
         item={'type':'object','properties':{'title':{'type':'string','maxLength':100},'interpretation':{'type':'string','maxLength':650},'recommendation':{'type':'string','maxLength':500},'evidence_ids':{'type':'array','minItems':2,'maxItems':10,'items':{'type':'string'}}},'required':['title','interpretation','recommendation','evidence_ids'],'additionalProperties':False}
-        super().__init__(directory,model,[Tool(function('submit_comparison','提交有双方证据的对照与可操作建议。',{'summary':{'type':'string','maxLength':500},'findings':{'type':'array','minItems':1,'maxItems':5,'items':item},'limits':{'type':'array','maxItems':6,'items':{'type':'string','maxLength':300}}}),self.submit)],request='对照两段比赛，解释值得学习的区别及适用条件。',max_calls=2)
+        super().__init__(directory,model,[Tool(function('submit_comparison','提交有双方证据的对照与可操作建议。',{'summary':{'type':'string','maxLength':500},'findings':{'type':'array','minItems':1,'maxItems':5,'items':item},'limits':{'type':'array','maxItems':6,'items':{'type':'string','maxLength':300}}},required=['summary','findings']),self.submit)],request='对照两段比赛，解释值得学习的区别及适用条件。',max_calls=2)
         self.cancelled=cancelled
     def submit(self,args):
-        valid={e['id'] for e in self.payload['evidence']}
+        valid={e['id'] for e in self.payload['evidence']};args.setdefault('limits',[])
         for f in args['findings']:
             refs=f['evidence_ids']
             if any(i not in valid for i in refs) or not any(i.startswith('current:') for i in refs) or not any(i.startswith('reference:') for i in refs):raise ValueError('每条判断须引用双方真实证据')
@@ -142,7 +142,7 @@ class CompareHost(WorkspaceHost):
         t.snapshot={'comparison':self.payload};t.tools=[self.tools['submit_comparison'].definition];t.allowed_tools=list(t.tools);return t
     def invoke(self,messages,tools,turn):
         from langchain_core.messages import SystemMessage,HumanMessage
-        messages=[SystemMessage(content=turn.prompt),HumanMessage(content=json.dumps(turn.snapshot,ensure_ascii=False))]
+        messages=[SystemMessage(content=turn.prompt),HumanMessage(content=json.dumps({**turn.snapshot,**self.feedback()},ensure_ascii=False))]
         reserve=input_reservation({'messages':wire_messages(messages),'tools':tools})
         if self.state.get('input_reserved',0)+reserve>60000:raise LoopStop('input_budget')
         self.state['input_reserved']=self.state.get('input_reserved',0)+reserve;self._save();self.callback(self.state['calls']+1)

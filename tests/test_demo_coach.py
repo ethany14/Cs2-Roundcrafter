@@ -136,3 +136,29 @@ def test_local_preparation_and_actual_usage_settlement(tmp_path,monkeypatch):
  assert s.state['preparation']=='local_evidence_and_window'
  assert s.state['model_calls']==2
  assert s.state['input_budget']['charged_or_reserved']==100
+
+def test_round_coach_survives_format_slips_and_learns_from_rejection(tmp_path):
+ """The failure seen in real batches: a schema slip on the first submit, then the same slip again because the
+ rebuilt prompt carried no reason. Slips are now repaired, and a real rejection is shown to the retry."""
+ from langchain_core.messages import AIMessage
+ import json
+ s=session();s.state['model_calls']=0
+ sloppy=payload(s);c=sloppy['claims'][0];c.pop('clip');c['hypothesis_id']='custom';c['title']='自由推断';c['confidence']='medium';c['facts']=['extra']
+ sloppy['alternatives']=['plain string'];sloppy['summary']='长'*900
+ class Sloppy:
+  request_timeout=5;calls=0
+  def invoke(self,messages,tools):self.calls+=1;return AIMessage(content='',tool_calls=[dict(id='1',name='submit_analysis',args=copy.deepcopy(sloppy))])
+ m=Sloppy();h=CoachHost(s,tmp_path/'a',m)
+ try:assert h.run(slice_steps=4)['reason']=='completed' and m.calls==1 and s.state['result']['alternatives']==['plain string']
+ finally:h.close()
+ s=session();s.state['model_calls']=0;good=payload(s)
+ class Learns:
+  request_timeout=5;calls=0
+  def invoke(self,messages,tools):
+   self.calls+=1;told='previous_attempt_rejected' in messages[-1].content
+   args=copy.deepcopy(good) if told else {'summary':'x','claims':[{'interpretation':'no evidence cited'}]}
+   return AIMessage(content='',tool_calls=[dict(id=str(self.calls),name='submit_analysis',args=args)])
+ m=Learns();h=CoachHost(s,tmp_path/'b',m)
+ try:assert h.run(slice_steps=4)['reason']=='completed' and m.calls==2 and s.state['result']
+ finally:h.close()
+ assert s.state['checks'][0]['stage']=='tool_arguments' and 'evidence_ids' in s.state['checks'][0]['errors'][0]

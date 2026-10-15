@@ -261,3 +261,25 @@ def test_player_names_for_display_never_reach_model_packet(env):
     assert wb.catalog()[0]['names']['P1']=='ZywOo'
     packet=json.dumps(wb.evidence_pack(q())['packet'],ensure_ascii=False)
     assert 'ZywOo' not in packet and 'ropz' not in packet and '765' not in packet and 'P1' in packet
+
+class LearnsFromRejection:
+    """Cites a wrong evidence id first; fixes it only if the next prompt says why the first call was rejected."""
+    calls=0
+    def __init__(self,good):self.good=good
+    def invoke(self,messages,tools):
+        type(self).calls+=1;told='previous_attempt_rejected' in messages[-1].content
+        args=copy.deepcopy(self.good)
+        if not told:args['findings'][0]['evidence_ids']=['E999']
+        return AIMessage(content='',tool_calls=[{'id':'x','name':'submit_findings','args':args}])
+
+def test_agent_format_slips_and_rejection_feedback(env):
+    write_match(env,A,'m.dem',[rnd(events=[plant(5)]),rnd()])
+    eid=wb.evidence_pack(q())['evidence'][0]['id']
+    sloppy={'summary':'s'*400,'findings':[{'conclusion':'c','facts':'one fact','inference':'i','uncertainty':'u','recommendation':'r','evidence_ids':[eid],'confidence':'high'}]}
+    Submitting.calls=0
+    s=wait(wb.agent_start({'query':q(),'consent':True,'endpoint_host':'offline-test'},model_factory=lambda:Submitting(sloppy))['id'])
+    assert s['status']=='completed' and s['model_calls']==1 and s['result']['missing']==[] and s['result']['findings'][0]['facts']==['one fact']
+    good={'summary':'s','findings':[{'conclusion':'c','facts':['f'],'inference':'i','uncertainty':'u','recommendation':'r','evidence_ids':[eid]}]}
+    LearnsFromRejection.calls=0
+    s=wait(wb.agent_start({'query':q(outcome='win'),'consent':True,'endpoint_host':'offline-test'},model_factory=lambda:LearnsFromRejection(good))['id'])
+    assert s['status']=='completed' and s['model_calls']==2

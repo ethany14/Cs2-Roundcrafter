@@ -171,9 +171,9 @@ class Session:
    if self.repairs>=2:raise LoopStop('validation_failed')
    return dict(accepted=False,errors=errors,next='修正后再次submit_analysis')
   if self.cancelled.is_set():raise LoopStop('cancelled')
-  self.state['result']=dict(summary=args['summary'],claims=checked,alternatives=[x.get('text','') if isinstance(x,dict) else x for x in args['alternatives']],unknown=self.packet['unknown']);self.save();return dict(accepted=True)
+  self.state['result']=dict(summary=args['summary'],claims=checked,alternatives=[x.get('text','') if isinstance(x,dict) else x for x in args.get('alternatives',[])],unknown=self.packet['unknown']);self.save();return dict(accepted=True)
  def tools(self):
-  return [Tool(function('read_round_evidence','读取当前回合行动事实与可验证假设',{}),self.overview),Tool(function('read_action_window','核对30秒以内的玩家状态与事件',{'start':{'type':'number'},'end':{'type':'number'}}),self.window),Tool(function('submit_analysis','自由解释战术与可能意图。hypothesis_id用custom，自拟title、confidence，并引用支持结论的evidence_ids。不要把推断当成实测事实。',{'summary':{'type':'string','maxLength':500},'claims':{'type':'array','minItems':1,'maxItems':6,'items':{'type':'object','properties':{'hypothesis_id':{'type':'string'},'title':{'type':'string','maxLength':100},'confidence':{'type':'string','enum':['high','medium','low']},'evidence_ids':{'type':'array','items':{'type':'string'}},'interpretation':{'type':'string','maxLength':500},'side':{'type':'string','enum':['T','CT','both']},'clip':{'type':'object','properties':{'start':{'type':'number'},'end':{'type':'number'}},'required':['start','end'],'additionalProperties':False}},'required':['evidence_ids','interpretation','clip'],'additionalProperties':False}},'alternatives':{'type':'array','items':{'type':'object','properties':{'text':{'type':'string'}},'required':['text'],'additionalProperties':False},'maxItems':4}}),self.submit)]
+  return [Tool(function('read_round_evidence','读取当前回合行动事实与可验证假设',{}),self.overview),Tool(function('read_action_window','核对30秒以内的玩家状态与事件',{'start':{'type':'number'},'end':{'type':'number'}}),self.window),Tool(function('submit_analysis','自由解释战术与可能意图。hypothesis_id用custom，自拟title、confidence，并引用支持结论的evidence_ids。不要把推断当成实测事实。',{'summary':{'type':'string','maxLength':500},'claims':{'type':'array','minItems':1,'maxItems':6,'items':{'type':'object','properties':{'hypothesis_id':{'type':'string'},'title':{'type':'string','maxLength':100},'confidence':{'type':'string','enum':['high','medium','low']},'evidence_ids':{'type':'array','items':{'type':'string'}},'interpretation':{'type':'string','maxLength':500},'side':{'type':'string','enum':['T','CT','both']},'clip':{'type':'object','properties':{'start':{'type':'number'},'end':{'type':'number'}},'required':['start','end'],'additionalProperties':False}},'required':['evidence_ids','interpretation'],'additionalProperties':False}},'alternatives':{'type':'array','items':{'type':'object','properties':{'text':{'type':'string'}},'required':['text'],'additionalProperties':False},'maxItems':4}},required=['summary','claims']),self.submit)]
  def prepare_local(self):
   """Read available local evidence before asking the model to interpret it."""
   if not self.read:self.overview({})
@@ -225,6 +225,8 @@ class CoachHost(WorkspaceHost):
   if getattr(self.session,'last_window',None):t.snapshot['inspected_window']=self.session.last_window
   t.prompt+=' 本轮只执行 '+next(iter(names))+'；不要重复取证。'
   t.tools=[tool.definition for tool in self.tools.values() if tool.name in names];t.allowed_tools=list(t.tools);t.snapshot["must_decide"]=True;return t
+ def action_error(self,exc):
+  out=super().action_error(exc);self.session.state['checks'].append(dict(errors=[out['message']],stage='tool_arguments'));self.session.save();return out
  def progress(self,text,call,turn):
   self.session.state['model_calls']=getattr(self.session,'used',0)+self.state['calls'];self.session.save()
  def invoke(self,messages,tools,turn):
@@ -232,7 +234,7 @@ class CoachHost(WorkspaceHost):
   from langchain_core.messages import SystemMessage,HumanMessage
   # The state contains inspected evidence, the selected window and validation feedback.
   # Send it once instead of repeatedly accumulating full historical snapshots.
-  snapshot={**turn.snapshot,'validation_feedback':self.session.state.get('checks',[])[-1:]}
+  snapshot={**turn.snapshot,'validation_feedback':self.session.state.get('checks',[])[-1:],**self.feedback()}
   messages=[SystemMessage(content=turn.prompt),HumanMessage(content=json.dumps(snapshot,ensure_ascii=False,separators=(',',':')))]
   count=input_reservation({'messages':wire_messages(messages),'tools':tools})
   # Reserve conservatively before sending; settle completed calls to provider usage.

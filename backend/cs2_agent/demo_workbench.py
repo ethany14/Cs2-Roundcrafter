@@ -886,11 +886,11 @@ def make_host(packet,evidence,directory,model,cancelled,save):
                   'inference':{'type':'string','maxLength':400},'uncertainty':{'type':'string','maxLength':200},'recommendation':{'type':'string','maxLength':300},
                   'evidence_ids':{'type':'array','minItems':1,'maxItems':8,'items':{'type':'string'}}},'required':['conclusion','facts','inference','uncertainty','recommendation','evidence_ids'],'additionalProperties':False}
             super().__init__(directory,model,[Tool(function('submit_findings','提交基于当前回合集合的发现：事实、推断与建议分开，每条引用证据编号。',
-                {'summary':{'type':'string','maxLength':300},'findings':{'type':'array','minItems':1,'maxItems':4,'items':item},'missing':{'type':'array','maxItems':4,'items':{'type':'string','maxLength':200}}}),self.submit)],
+                {'summary':{'type':'string','maxLength':300},'findings':{'type':'array','minItems':1,'maxItems':4,'items':item},'missing':{'type':'array','maxItems':4,'items':{'type':'string','maxLength':200}}},required=['summary','findings']),self.submit)],
                 request='分析当前选中回合集合中的重复行为'+('，并与参考组比较' if 'b' in packet else ''),max_calls=2)
             self.result=None;self.started=time.monotonic();self.cancelled=cancelled
         def submit(self,args):
-            valid={e['id']:e for e in evidence}
+            valid={e['id']:e for e in evidence};args.setdefault('missing',[])
             for f in args['findings']:
                 if any(i not in valid for i in f['evidence_ids']):raise ValueError('evidence_ids 必须来自证据包')
                 if 'b' in packet and not {valid[i]['track'] for i in f['evidence_ids']}>= {'a'} :raise ValueError('每条发现至少引用当前组证据')
@@ -909,7 +909,7 @@ def make_host(packet,evidence,directory,model,cancelled,save):
             t.snapshot={'workbench':packet};t.tools=[self.tools['submit_findings'].definition];t.allowed_tools=list(t.tools);return t
         def invoke(self,messages,tools,turn):
             from langchain_core.messages import SystemMessage,HumanMessage
-            messages=[SystemMessage(content=turn.prompt),HumanMessage(content=json.dumps(turn.snapshot,ensure_ascii=False))]
+            messages=[SystemMessage(content=turn.prompt),HumanMessage(content=json.dumps({**turn.snapshot,**self.feedback()},ensure_ascii=False))]
             reserve=input_reservation({'messages':wire_messages(messages),'tools':tools})
             if self.state.get('input_reserved',0)+reserve>60000:raise LoopStop('input_budget')
             self.state['input_reserved']=self.state.get('input_reserved',0)+reserve;self._save();save(self.state['calls']+1)

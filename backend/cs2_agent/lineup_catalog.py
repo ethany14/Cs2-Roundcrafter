@@ -95,9 +95,16 @@ class CompatibilityResult:
 
 def write_json(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix('.tmp')
+    # Unique temp name (parallel writers) and a short retry: on Windows the swap fails while a reader has the file open.
+    import os,time,uuid
+    temporary = path.with_name(path.name+'.'+uuid.uuid4().hex[:8]+'.tmp')
     temporary.write_text(json.dumps(value,ensure_ascii=False,indent=2),encoding='utf-8')
-    temporary.replace(path)
+    for attempt in range(20):
+        try:
+            os.replace(temporary,path);return
+        except PermissionError:
+            if attempt==19:temporary.unlink(missing_ok=True);raise
+            time.sleep(.05)
 
 def migrate(destination=CATALOG):
     """Additive migration: all legacy lesson fields, candidates and source records survive."""
