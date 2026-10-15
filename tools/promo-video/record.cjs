@@ -49,24 +49,29 @@ async function discover(){
   const mine=done.filter(m=>!isPro(m));
   let match=CFG.match?done.find(m=>m.id===CFG.match||m.name===CFG.match):null;
   if(CFG.match&&!match)throw new Error('match '+CFG.match+' not found in the library');
-  const score=m=>(WB_MAPS.includes(m.map)?2:0)+(m.identity.kind==='player'?1:0)+m.rounds/100;
-  if(!match)match=mine.slice().sort((a,b)=>score(b)-score(a)||b.created_at-a.created_at)[0]||done.find(m=>!isPro(m))||done[0];
+  // Featured match: your own (player) demo on a workbench map if you have one, otherwise a pro demo on a workbench map
+  // ("featured": "pro" forces a pro demo). Unclassified demos are only a last resort.
+  const onWb=m=>WB_MAPS.includes(m.map),newest=xs=>xs.slice().sort((a,b)=>b.rounds-a.rounds||b.created_at-a.created_at)[0];
+  if(!match&&CFG.featured!=='pro')match=newest(mine.filter(m=>onWb(m)&&m.identity.kind==='player'));
+  if(!match)match=newest(done.filter(m=>onWb(m)&&isPro(m)))||newest(mine.filter(onWb))||done[0];
   if(!match)throw new Error('No parsed match in the library. Import at least one demo in the app first.');
-  const pros=done.filter(m=>isPro(m)&&m.map===match.map);
+  const pros=done.filter(m=>isPro(m)&&m.map===match.map&&m.id!==match.id&&(!m.sha256||m.sha256!==match.sha256));
   const cat=await api('/api/workbench/catalog').catch(()=>({matches:[]}));
   const rounds=(cat.matches.find(m=>m.id===match.id)||{}).rounds||[];
   let round=CFG.round||rounds[Math.min(5,rounds.length-1)]||1,side=(BOARD[match.map]||{}).side||'T',compare=null;
   // Find a round of yours that actually has comparable pro rounds, so the comparison shot shows real candidates.
   if(pros.length&&!skipped('procompare')){
-    const tryRounds=[round,...rounds.filter(n=>n!==round)].slice(0,12);
-    outer:for(const n of tryRounds)for(const s of ['T','CT']){
+    // Scan a spread of rounds and keep the best-matching pro round (from a different match).
+    const tryRounds=CFG.round?[CFG.round]:rounds.filter(n=>n>=3).slice(0,16);let best=-1;
+    for(const n of tryRounds)for(const s of ['T','CT']){
       const c=await api(`/api/demo/compare?match=${match.id}&round=${n}&side=${s}`).catch(()=>null);
-      if(c?.candidates?.length){round=n;side=s;compare=c.candidates[0];break outer}}
+      const top=(c?.candidates||[]).find(x=>x.match!==match.id);
+      if(top&&(top.score??0)>best){best=top.score??0;round=n;side=s;compare=top}}
   }
   const [hubPlayers,account,lab]=await Promise.all([api('/api/hub/players').catch(()=>({players:[]})),api('/api/hub/account').catch(()=>({linked:false})),api('/api/lab/maps').catch(()=>({maps:[]}))]);
   const labMap=lab.maps.includes(CFG.lab.map)?CFG.lab.map:lab.maps.includes(match.map)?match.map:lab.maps[0];
   return {status,match,pros,round,side,compare,players:hubPlayers.players,account,labMap,done,
-    wbSource:match.identity.kind==='player'?'player':'unknown',proVerified:pros.some(m=>m.identity.verified)};
+    wbSource:match.identity.kind==='player'?'player':isPro(match)?'pro':'unknown',featuredPro:isPro(match),proVerified:pros.some(m=>m.identity.verified)};
 }
 const skipped=id=>(CFG.skip||[]).includes(id)||(ONLY&&!ONLY.includes(id));
 
@@ -80,7 +85,8 @@ async function aliases(d){
   for(const m of scope){const r=await api('/api/demo/players?id='+m.id).catch(()=>({names:{}}));for(const n of Object.values(r.names||{}))names.add(n)}
   if(CFG.anonymize==='all')for(const p of d.players)names.add(p.name);
   else{const proNames=new Set();for(const m of d.done.filter(m=>m.identity.kind==='professional')){const r=await api('/api/demo/players?id='+m.id).catch(()=>({names:{}}));for(const n of Object.values(r.names||{}))proNames.add(n)}
-    for(const p of d.players)if(!proNames.has(p.name))names.add(p.name)}
+    for(const p of d.players)if(!proNames.has(p.name))names.add(p.name)
+    for(const n of proNames)names.delete(n)}   // a pro who also appears in an unclassified demo keeps their real name
   if(CFG.anonymize!=='all')for(const n of own)names.delete(n);
   return [...names].filter(n=>n&&n.length>=2).sort((a,b)=>b.length-a.length).map((n,i)=>[n,CALL[i]||'Player'+String(i+1).padStart(2,'0')]);
 }
@@ -132,8 +138,8 @@ function buildShots(d){
     ['js',0,`document.getElementById('side').value=${JSON.stringify(d.side)};document.getElementById('side').dispatchEvent(new Event('change'))`],
     ['move','#compareTab',0.3,0.8],['click',1.2],['wait',1.25,400],
     ['move','#findComparison',1.6,0.6],['click',2.3],['until',2.35,`[...document.querySelectorAll('#comparisonCandidates button')].length>0`,40000],
-    ['move','#comparisonCandidates',2.6,0.8],['wheel',3.6,200],
-    ['move','#comparisonCandidates button >> nth=0',4.6,0.8],['click',5.5],['until',5.55,`!document.getElementById('comparisonViewer').hidden`,30000],['wait',5.6,600],
+    ['move','#comparisonCandidates',2.6,0.8],
+    ['move','#comparisonCandidates button',4.6,0.8],['click',5.5],['until',5.55,`!document.getElementById('comparisonViewer').hidden`,30000],['wait',5.6,600],
     ['move','#comparePlay',6.2,0.7],['click',7.0],['move',[960,560],7.6,1.5],
     ['move','#analyzeComparison',11.0,1.2],['move',[1500,640],13.5,1.5],
     ['js',15.9,`document.getElementById('closeComparison')?.click()`]]},
@@ -150,14 +156,16 @@ function buildShots(d){
   const wbWhy=!wb?`your match is on ${mapName}; the multi-round workbench supports Dust2 / Nuke`:null;
   add({id:'chap-multi',kind:'mg',scene:'chap1',dur:3.2,chap:{k:'03',en:'MULTI-ROUND',title:'多回合分析',sub:'把几十个回合叠在一起，习惯一眼就能看出来'}},wbWhy);
   const openWb=[
-    ['js',0,`const s=document.getElementById('wbSource');s.value=${JSON.stringify(d.wbSource)};s.dispatchEvent(new Event('change'));const mp=document.getElementById('wbMap');if(![...mp.options].some(o=>o.value===${JSON.stringify(m.map)}))mp.add(new Option(${JSON.stringify(mapName)},${JSON.stringify(m.map)}));mp.value=${JSON.stringify(m.map)};mp.dispatchEvent(new Event('change'))`],
+    ['js',0,`const s=document.getElementById('wbSource');s.value=${JSON.stringify(d.wbSource)};s.dispatchEvent(new Event('change'));const mp=document.getElementById('wbMap');if(![...mp.options].some(o=>o.value===${JSON.stringify(m.map)}))mp.add(new Option(${JSON.stringify(mapName)},${JSON.stringify(m.map)}));mp.value=${JSON.stringify(m.map)};mp.dispatchEvent(new Event('change'));`+LIMIT_JS(m.name)],
     ['move','.mc-nav button[data-view=analysis]',0.2,0.8],['click',1.0],['wait',1.05,500],
     ['js',1.1,`if(document.getElementById('wbFilters').offsetParent===null)document.getElementById('wbFilterToggle').click()`],
-    ['move','#wbSource',1.4,0.6],['select',2.0,'#wbSource',d.wbSource],['wait',2.05,600],
+    ['js',1.15,`try{setMode('heat')}catch{}`],['js',1.2,LIMIT_JS(m.name)],   // don't open on an over-limit overlay
+    ['move','#wbSource',1.4,0.6],['wait',2.05,600],
     ['js',2.2,`const s=document.getElementById('wbMap');if(![...s.options].some(o=>o.value===${JSON.stringify(m.map)}))s.add(new Option(${JSON.stringify(mapName)},${JSON.stringify(m.map)}))`],
-    ['move','#wbMap',2.3,0.5],['select',2.8,'#wbMap',m.map],
+    ['move','#wbMap',2.3,0.5],
+    ['js',3.0,LIMIT_JS(m.name)],   // stay under the overlay limit before switching to the overlay
     ['move','.wb-modes button[data-mode=multi]',3.1,0.6],['click',3.7],['until',3.75,WB_READY,60000]];
-  add({id:'multi',kind:'app',dur:12,caps:[[0,'多回合分析：你所有比赛里的同类回合，叠在一张图上'],[6,'按回合开始、首次进点或下包对齐，一起播放']],acts:[
+  add({id:'multi',kind:'app',dur:12,caps:[[0,d.featuredPro?'多回合分析：所有职业比赛里的同类回合，叠在一张图上':'多回合分析：你所有比赛里的同类回合，叠在一张图上'],[6,'按回合开始、首次进点或下包对齐，一起播放']],acts:[
     ...openWb,['move','#wbAlign',4.4,0.6],['select',5.0,'#wbAlign','first_entry'],['until',5.05,WB_READY,60000],
     ['move','#wbSpeed',5.6,0.6],['select',6.2,'#wbSpeed','2'],['move','#wbPlay',6.5,0.6],['click',7.1],['move',[900,560],7.6,1.6]]},wbWhy);
   add({id:'filters',kind:'app',dur:12,caps:[[0,'筛选：阵营、胜负、下包、存活人数、经济、区域、选手'],[6.5,'每个条件都会显示被排除了多少回合']],acts:[
@@ -192,13 +200,13 @@ function buildShots(d){
     d.proVerified?['wait',0.1,1]:['js',0.1,`const c=document.getElementById('wbDeclared');if(!c.checked){c.checked=true;c.dispatchEvent(new Event('change'))}`],
     ['move','.wb-modes button[data-mode=heat]',0.3,0.7],['click',1.1],['until',1.15,WB_READY,60000],
     ['move','#wbCompareToggle',1.7,0.7],['click',2.5],['until',2.55,WB_READY,60000],['wait',2.6,800],['move',[700,560],3.4,1.4],['move',[1250,560],5.6,1.4],
-    ['move','#wbTabAgent',7.6,0.8],['click',8.5],['wait',8.55,500]]},wbWhy||(!d.pros.length?`no professional demo on ${mapName}`:null));
+    ['move','#wbTabAgent',7.6,0.8],['click',8.5],['wait',8.55,500]]},wbWhy||(!d.pros.length?`no professional demo on ${mapName}`:d.featuredPro?'featured match is itself a pro demo (the review-level pro comparison covers this)':null));
   // ---- career page
   const careerWhy=!hasPlayers?'no player statistics yet (open a match → 比赛数据 once, or link Steam)':null;
   add({id:'chap-career',kind:'mg',scene:'chap2',dur:3.2,chap:{k:'05',en:'CAREER',title:'我的生涯',sub:'每一场比赛自动统计，进步看得见'}},careerWhy);
   add({id:'career',kind:'app',dur:13,caps:[[0,'我的生涯：Rating、ADR、KAST、首杀、多杀、道具伤害'],[5,'Rating 走势与分地图数据'],[9,'关联 Steam 后，下载的 demo 自动导入；点任意一场直接打开回放']],acts:[
     ['move','.mc-nav button[data-view=profile]',0.2,0.8],['click',1.0],['until',1.05,`document.querySelector('#profileStats .stat-tile')||document.querySelector('#playerQuick button')`,20000],
-    ...(d.account.linked?[['wait',1.1,800]]:[['move','#playerQuick button >> nth=0',1.4,0.8],['click',2.3]]),
+    ...(d.account.linked&&!d.featuredPro?[['wait',1.1,800]]:[['move','#playerQuick button >> nth=0',1.4,0.8],['click',2.3]]),
     ['until',2.35,`document.querySelector('#profileStats .stat-tile')`,20000],['move',[1150,420],2.8,1.2],
     ['wheel',5.0,320],['move',[1150,600],5.4,1.0],['wheel',7.2,380],['move','#trackingCard',9.0,1.0],['move',[1200,640],11.0,1.2]]},careerWhy);
   // ---- utility lab
@@ -225,6 +233,9 @@ function buildShots(d){
   add({id:'outro',kind:'mg',scene:'s11',dur:7});
   return S;
 }
+// Tick the featured match, then others, while the total stays at or under ~100 rounds (unticked = all matches).
+const LIMIT_JS=name=>`const ls=[...document.querySelectorAll('#wbMatches label')].map(l=>({c:l.querySelector('input'),n:+((l.textContent.match(/(\\d+) 回合/)||[])[1]||0),f:l.textContent.includes(${JSON.stringify(name.replace(/\.dem$/,''))})}));
+if(ls.reduce((a,x)=>a+x.n,0)>110){ls.sort((a,b)=>b.f-a.f||a.n-b.n);let s=0;for(const x of ls){if(s>0&&s+x.n>100)continue;s+=x.n;if(!x.c.checked){x.c.checked=true;x.c.dispatchEvent(new Event('change'))}}}`;
 // Workbench is "ready" when no load is running and the status line isn't a progress message.
 const WB_READY=`document.getElementById('wbCancelLoad').hidden&&!/…|\\.\\.\\.|已加载 \\d+\\/\\d+/.test(document.getElementById('wbLoad')?.textContent||'')`;
 
@@ -361,7 +372,7 @@ const until=async(p,expr,ms)=>{const t0=Date.now();await p.clock.runFor(300);awa
   const CH={title:'开场 · 导入与 2D 回放',agent:'AI 分析师',procompare:'职业对照',board:'战术板','chap-multi':'多回合分析：热力图 · 道具 · 筛选','chap-career':'我的生涯','chap-lab':'道具实验室',models:'模型设置与结尾'};
   const mmss=x=>String(Math.floor(x/60)).padStart(2,'0')+':'+String(Math.floor(x%60)).padStart(2,'0');
   let chapters=[],acc=0;for(const s of SHOTS){if(CH[s.id])chapters.push([acc,CH[s.id]]);acc+=s.dur}
-  chapters=chapters.filter((c,i)=>i===0||c[0]-chapters[i-1][0]>=10);if(chapters.length>1&&TOTAL-chapters.at(-1)[0]<10)chapters.pop();chapters[0][0]=0;
+  chapters=chapters.filter((c,i)=>i===0||c[0]-chapters[i-1][0]>=10);if(chapters.length>1&&TOTAL-chapters.at(-1)[0]<10)chapters.pop();if(chapters.length)chapters[0][0]=0;
   fs.writeFileSync(OUT.replace(/\.mp4$/,'')+'.chapters.txt',chapters.map(c=>mmss(c[0])+' '+c[1]).join('\n')+'\n','utf8');
   const wav=OUT.replace(/\.mp4$/,'')+'.music.wav';
   const py=/[\\/]/.test(CFG.python)?path.resolve(HERE,CFG.python):CFG.python;

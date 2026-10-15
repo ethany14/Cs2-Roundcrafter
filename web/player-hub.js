@@ -77,8 +77,8 @@ function renderTracking(){const a=acct,s=a.settings,box=E('trackingCard');box.re
     el('label',{class:'field'},'Steam Web API Key',key),el('label',{class:'field'},t('比赛历史验证码'),code),el('label',{class:'field'},t('最近一场比赛分享码'),known),
     el('div',{class:'toolbar'},b(t('保存设置'),async()=>{const raw={replays_dir:dir.value,auto_import:auto.checked,known_code:known.value};if(key.value)raw.api_key=key.value;if(code.value)raw.auth_code=code.value;await api('/api/hub/settings',raw);flash(t('设置已保存'));refreshAccount()},'mc-primary'),
       b(t('检查新比赛'),async()=>{const r=await api('/api/hub/sharecodes/check',{});flash(t('发现 {0} 场新比赛',[r.found.length]));refreshAccount()})),
-    a.sharecodes.length?el('div',{class:'wb-lines'},...a.sharecodes.slice().reverse().slice(0,8).map(c=>el('div',{class:'wb-line'},el('i',{class:'dot'}),el('span',{class:'lbl mc-mono'},c.code),el('small',{class:'meta'},'#'+c.match_id.slice(-8)),el('span',{class:'acts'})))):null,
-    a.sharecodes.length?el('p',{class:'mc-note'},t('Valve 不允许在没有游戏客户端的情况下下载天梯 demo：请在 CS2 中下载这些比赛，下载后会自动导入。')):null)}
+    a.sharecodes.length?el('div',{class:'wb-lines'},...a.sharecodes.slice().reverse().slice(0,8).map(c=>el('div',{class:'wb-line'},el('i',{class:'dot'}),el('span',{class:'lbl mc-mono'},c.code),el('small',{class:'meta'},'#'+c.match_id.slice(-8)),el('span',{class:'acts'})))):'',
+    a.sharecodes.length?el('p',{class:'mc-note'},t('Valve 不允许在没有游戏客户端的情况下下载天梯 demo：请在 CS2 中下载这些比赛，下载后会自动导入。')):'')}
 async function loadPlayers(){const r=await api('/api/hub/players');playersIdx=r.players;E('playerList').replaceChildren(...playersIdx.map(p=>el('option',{value:p.name})));
   E('playerQuick').replaceChildren(...playersIdx.slice(0,12).map(p=>b(p.name+' · '+p.matches,()=>showProfile(p.steamid),'chip')))}
 E('playerSearch').onchange=()=>{const p=playersIdx.find(x=>x.name.toLowerCase()===E('playerSearch').value.trim().toLowerCase());if(p)showProfile(p.steamid);else flash(t('本机 demo 中没有这名选手'))};

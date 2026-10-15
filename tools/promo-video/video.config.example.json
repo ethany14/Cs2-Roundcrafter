@@ -1,6 +1,7 @@
 {
   "app": "http://127.0.0.1:8790",
   "out": "out/roundcrafter_zh.mp4",
+  "featured": "auto",
   "match": null,
   "round": null,
   "anonymize": "others",

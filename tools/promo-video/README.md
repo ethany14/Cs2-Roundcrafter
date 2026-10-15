@@ -58,11 +58,12 @@ To change settings, copy `video.config.example.json` to `video.config.json`:
 
 | Key | Meaning |
 |---|---|
-| `match` | Match id or file name to feature. Default: your newest Dust2/Nuke match. |
-| `round` | Round for the replay and pro-comparison shots. Default: one that has a pro match. |
+| `featured` | `"auto"` (default) features your own (普通玩家) demo on Dust2/Nuke if you have one, otherwise a pro demo. `"pro"` always features a pro demo; the comparison then uses pro rounds from *other* matches, and the workbench "对照职业" shot is skipped. |
+| `match` | Match id or file name to feature (overrides `featured`). |
+| `round` | Round for the replay and pro-comparison shots. Default: the round whose best pro match scores highest. |
 | `anonymize` | `"others"` (default) replaces every player name except your own linked account with call-signs (Atlas, Nova, …) and masks SteamIDs on screen. Pro players keep their names. `"all"` also hides your own name and avatar. `"none"` changes nothing. |
 | `python` | Python executable for the music step, if `python` isn't the right one. |
-| `lab` | `map`, `mode` (`auto`, `auto_all`, `stand_left`, …). `origin` / `target` are either radar points `[u, v]` (0–1) that get clicked on the map, or exact `[x, y, z]` you can copy from the lab's 站位 / 目标 fields. |
+| `lab` | `map`, `mode` (`auto`, `auto_all`, `stand_left`, …). `origin` / `target` are either radar points `[u, v]` (0–1) that get clicked on the map, or exact `[x, y, z]` you can copy from the lab's 站位 / 目标 fields. Prefer exact points from a lab run that already found a candidate, so the shot doesn't end on "未找到候选". |
 | `skip` | Shot ids to leave out, e.g. `["models"]`. |
 
 Captions and timing are all in the `buildShots()` function in `record.cjs`. Each shot is a short list of `move` / `click` / `select` / `fill` / `wait` actions, timed in seconds from the start of the shot.
