@@ -38,7 +38,7 @@ def foundation_tools():
 def lineup_job_tools():
     from .lineup_research import start_job, get_job, cancel_job
     return [Tool(function('start_lineup_research','Run an evidence-grounded utility research task through Eregion AgentLoop; shared bounded web/video tools, not physics solving.',{
-        'query':{'type':'string','minLength':1,'maxLength':300},'mode':{'type':'string','enum':['single','tactic']},
+        'query':{'type':'string','minLength':1,'maxLength':300},'mode':{'type':'string','enum':['single','tactic','rag']},
         'map':{'type':'string'},'party_size':{'type':'integer','minimum':1,'maximum':5}},required=['query','mode']),start_job),
         Tool(function('get_lineup_research','Read task progress, structured evidence, compatibility and call usage.',{'id':{'type':'string'}}),lambda args:get_job(args['id'])),
         Tool(function('cancel_lineup_research','Cancel further research calls and discard late model results.',{'id':{'type':'string'}}),lambda args:cancel_job(args['id']))]

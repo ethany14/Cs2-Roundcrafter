@@ -15,6 +15,10 @@ class Handler(BaseHTTPRequestHandler):
  def do_GET(self):
   if not self.permitted():return self.send(403,{'error':'Local only'})
   route=urlsplit(self.path).path
+  if route=='/assistant':
+   from urllib.parse import parse_qsl,urlencode
+   params=dict(parse_qsl(urlsplit(self.path).query));params['view']='research'
+   return self.redirect('/demos?'+urlencode(params))
   if route in ('/auth/steam/start','/auth/steam/return'):
    from . import player_hub as hub
    from urllib.parse import parse_qs
@@ -171,7 +175,7 @@ class Handler(BaseHTTPRequestHandler):
    except (ValueError,OSError):model={'configured':False,'host':None}
    from .reach_sources import readiness
    return self.send(200,{'token':TOKEN,'model':model,'indexed':20,'verified_executable':0,'research_services':readiness()})
-  static={'/demos':('demo-review.html','text/html'),'/demo-review.js':('demo-review.js','text/javascript'),'/demo-review.css':('demo-review.css','text/css'),'/lab':('free-lab.html','text/html'),'/free-lab.js':('free-lab.js','text/javascript'),'/free-lab.css':('free-lab.css','text/css'),'/llm-settings.js':('llm-settings.js','text/javascript'),'/assistant':('assistant.html','text/html'),'/assistant.js':('assistant.js','text/javascript'),'/assistant.css':('assistant.css','text/css'),'/':('demo-review.html','text/html'),'/demo-compare.js':('demo-compare.js','text/javascript'),'/demo-workbench.js':('demo-workbench.js','text/javascript'),'/mission.css':('mission.css','text/css'),'/replay-engine.js':('replay-engine.js','text/javascript'),'/cs-icons.js':('cs-icons.js','text/javascript'),'/tactic-board.js':('tactic-board.js','text/javascript'),'/player-hub.js':('player-hub.js','text/javascript'),'/movement.js':('movement.js','text/javascript'),'/i18n.js':('i18n.js','text/javascript'),'/i18n-en.js':('i18n-en.js','text/javascript'),'/demo-workbench.css':('demo-workbench.css','text/css'),'/tactics.css':('tactics.css','text/css'),'/nuke':('nuke-teaching.html','text/html'),'/nuke-teaching.js':('nuke-teaching.js','text/javascript'),'/solver':('free-lab.html','text/html'),'/lineups':('lineup-review.html','text/html'),'/lineup-review.js':('lineup-review.js','text/javascript')}
+  static={'/research-workspace.js':('research-workspace.js','text/javascript'),'/research-workspace.css':('research-workspace.css','text/css'),'/demos':('demo-review.html','text/html'),'/demo-review.js':('demo-review.js','text/javascript'),'/demo-review.css':('demo-review.css','text/css'),'/lab':('free-lab.html','text/html'),'/free-lab.js':('free-lab.js','text/javascript'),'/free-lab.css':('free-lab.css','text/css'),'/llm-settings.js':('llm-settings.js','text/javascript'),'/assistant':('assistant.html','text/html'),'/assistant.js':('assistant.js','text/javascript'),'/assistant.css':('assistant.css','text/css'),'/':('demo-review.html','text/html'),'/demo-compare.js':('demo-compare.js','text/javascript'),'/demo-workbench.js':('demo-workbench.js','text/javascript'),'/mission.css':('mission.css','text/css'),'/replay-engine.js':('replay-engine.js','text/javascript'),'/cs-icons.js':('cs-icons.js','text/javascript'),'/tactic-board.js':('tactic-board.js','text/javascript'),'/player-hub.js':('player-hub.js','text/javascript'),'/movement.js':('movement.js','text/javascript'),'/i18n.js':('i18n.js','text/javascript'),'/i18n-en.js':('i18n-en.js','text/javascript'),'/demo-workbench.css':('demo-workbench.css','text/css'),'/tactics.css':('tactics.css','text/css'),'/nuke':('nuke-teaching.html','text/html'),'/nuke-teaching.js':('nuke-teaching.js','text/javascript'),'/solver':('free-lab.html','text/html'),'/lineups':('lineup-review.html','text/html'),'/lineup-review.js':('lineup-review.js','text/javascript')}
   if route in static:
    name,kind=static[route];return self.send(200,(ROOT/'web'/name).read_bytes(),kind+'; charset=utf-8')
   return self.send(404,{'error':'Not found'})

@@ -168,7 +168,7 @@ function showView(v,opts={}){
   if(v==='review'&&S.mode!=='single')return setMode('single',!opts.noAuto);
   if(v==='analysis'&&S.mode==='single')return setMode(S.lastMode||'multi');
   document.body.dataset.view=v;document.querySelectorAll('.mc-nav [data-view]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.view===v)));
-  if(['matches','room','profile'].includes(v))window.history.replaceState(null,'','/demos?view='+v);
+  if(['matches','room','profile','research'].includes(v)){const query=new URLSearchParams(v==='research'?(opts.params||''):'');query.set('view',v);window.history.replaceState(null,'','/demos?'+query);}
   document.dispatchEvent(new CustomEvent('viewchange',{detail:v}));
 }
 window.showView=showView;
@@ -527,10 +527,13 @@ async function pollAgent(){
 /* ---------------- init ---------------- */
 const wait=setInterval(async()=>{if(typeof token==='undefined'||!token)return;clearInterval(wait);
   restore();const params=new URLSearchParams(location.search);
-  const legacy=params.has('match')||params.has('comparison_job')||params.has('case');
+  const research=params.get('view')==='research';
+  if(research)showView('research',{params});
+  const legacy=!research&&(params.has('match')||params.has('comparison_job')||params.has('case'));
   if(params.get('wbmode')&&MODES.includes(params.get('wbmode')))S.mode=params.get('wbmode');else if(legacy)S.mode='single';
   setFilters(S.filtersOpen??false);sideTab(false);
   syncControls();try{await loadCatalog();fit();await refresh()}catch(e){note(e.message)}
+  if(research){showView('research',{params});return;}
   if(params.get('view')==='review')S.mode='single';
   setMode(S.mode,params.get('view')==='review');
   if(['room','profile'].includes(params.get('view')))showView(params.get('view'));

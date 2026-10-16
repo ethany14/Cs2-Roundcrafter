@@ -1,0 +1,40 @@
+/* Research is a Mission Control view: shared tokens, controls and panel chrome. */
+body[data-view=research] .v-research{display:grid}
+.v-research{grid-template-columns:minmax(300px,380px) minmax(0,1fr);gap:14px}
+.v-research .mc-panel{display:flex;flex-direction:column;min-height:0;min-width:0}
+.v-research .mc-body{overflow:auto;min-height:0;flex:1;padding:16px}
+.v-research .mode{display:grid;gap:8px;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.v-research .mode label{display:flex;gap:8px;align-items:center;color:var(--ink2)}
+.v-research input[type=radio]{accent-color:var(--red)}
+.v-research .query{display:block;color:var(--ink2)}
+.v-research textarea{display:block;width:100%;min-height:110px;resize:vertical;margin:8px 0 16px;line-height:1.6}
+.v-research .controls{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.v-research .controls input,.v-research .controls select{display:block;width:100%;margin-top:6px}
+.v-research .actions{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0 12px}
+.v-research .privacy,.v-research .note,.v-research .section-note{font-size:11px;color:var(--dim);line-height:1.6}
+.v-research details{border-top:1px solid var(--line);padding-top:10px;margin-top:12px}
+.v-research summary{cursor:pointer;color:var(--ink2);font-size:12px}
+.v-research .table-wrap{overflow:auto}.v-research table{border-collapse:collapse;width:100%}
+.v-research th,.v-research td{padding:6px;border-bottom:1px solid var(--line);font-size:11px;text-align:left}
+.v-research td input[type=number]{width:50px}
+.v-research .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.v-research .card,.v-research .role{padding:14px;background:var(--bg2);border:1px solid var(--line);margin:12px 0;border-radius:var(--r)}
+.v-research .badge{display:inline-block;font:10px var(--mono);color:var(--amber);border:1px solid var(--line2);padding:3px 6px;margin:8px 6px 0 0}
+.v-research .facts{display:grid;grid-template-columns:90px 1fr;gap:6px;font-size:12px}
+.v-research .facts dt{color:var(--dim)}.v-research .facts dd{margin:0;overflow-wrap:anywhere}
+.v-research h2{font-size:23px;margin:12px 0}.v-research h3{font-size:19px;margin:10px 0}
+.v-research .links{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
+.v-research a{color:var(--amber)}.v-research blockquote{border-left:2px solid var(--amber);padding:8px 12px;margin:12px 0;color:var(--ink2)}
+.v-research pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:300px;overflow:auto;font:11px/1.6 var(--mono);color:var(--dim)}
+.v-research #rag-phases{display:grid;grid-template-columns:repeat(4,1fr);list-style:none;padding:0;gap:10px;font-size:10px;color:var(--dim)}
+.v-research #rag-phases li{padding-top:8px;border-top:2px solid var(--line)}
+.v-research #rag-phases li.active{border-color:var(--red);color:var(--ink2)}
+.v-research #rag-usage{font:10px var(--mono);color:var(--dim);margin:12px 0}
+.v-research #rag-message{color:var(--ink);font-size:13px}
+.v-research #rag-retrievalTrace{padding-left:20px;color:var(--dim);font-size:11px;overflow-wrap:anywhere}
+.v-research .research-empty{padding:48px 20px;text-align:center;border:1px dashed var(--line2);margin-top:28px}
+.v-research .research-empty>span{color:var(--red);font-size:10px;letter-spacing:.15em}
+@media(max-width:900px){.v-research{grid-template-columns:1fr;overflow:auto}.v-research .mc-panel{min-height:300px}.v-research .mc-body{overflow:visible}.v-research .research-output{min-height:420px}}
+
+/* Keep shared navigation reachable when the new view adds a seventh item. */
+@media(min-width:901px){body:has(#researchWorkspace) .mc-nav{min-width:0;flex:1;overflow-x:auto}body:has(#researchWorkspace) .mc-nav>*{flex-shrink:0;padding-left:12px;padding-right:12px}body:has(#researchWorkspace) .mc-status{flex-shrink:0;gap:8px;padding:0 8px}}

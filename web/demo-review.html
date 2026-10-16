@@ -5,10 +5,11 @@
 <title>比赛复盘 · RoundCrafter</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap">
-<link rel="stylesheet" href="/mission.css"><link rel="stylesheet" href="/demo-review.css"><link rel="stylesheet" href="/demo-workbench.css">
+<link rel="stylesheet" href="/mission.css"><link rel="stylesheet" href="/demo-review.css"><link rel="stylesheet" href="/demo-workbench.css"><link rel="stylesheet" href="/research-workspace.css">
 <script src="/i18n-en.js"></script><script src="/i18n.js"></script><script src="/llm-settings.js" defer></script>
 </head>
 <body data-view="analysis">
+<script>if(new URLSearchParams(location.search).get("view")==="research")document.body.dataset.view="research";</script>
 <header class="mc-top">
   <a class="mc-brand" href="/demos"><b>RC</b>ROUNDCRAFTER<span>MISSION CONTROL</span></a>
   <nav class="mc-nav" aria-label="主导航">
@@ -18,6 +19,7 @@
     <button data-view="room"><i>04</i>战术室</button>
     <button data-view="profile"><i>05</i>我的生涯</button>
     <a href="/lab"><i>06</i>道具实验室</a>
+    <button data-view="research"><i>07</i>战术助手</button>
   </nav>
   <div class="mc-status"><span class="mc-led" aria-hidden="true"></span><span>本地计算</span><div class="mc-lang" data-lang-toggle aria-label="语言"></div></div>
   <button id="imports" hidden>比赛与上传</button>
@@ -230,6 +232,12 @@
     </div>
   </div>
 </section>
+<section id="researchWorkspace" class="mc-view v-research" aria-label="战术助手">
+<aside class="mc-panel research-request"><div class="mc-head"><i>07.A</i>研究需求<span class="mc-aside">先检索，再判断</span></div><div class="mc-body"><form id="rag-research"><p class="section-note">直接描述需求，助手会自行选择战术、道具和比赛资料并补查缺项。</p><label class="query">你想完成什么？<textarea id="rag-query" maxlength="300" required>Nuke T 方如何用 Heaven 烟配合进攻？请找战术与道具依据，并说明配合限制。</textarea></label><div class="controls"><label>地图<select id="rag-map"><option value="de_nuke">Nuke</option><option value="de_dust2">Dust2（本地资料可能不足）</option><option value="de_mirage">Mirage（无本地模板）</option><option value="de_inferno">Inferno（本地资料可能不足）</option><option value="de_ancient">Ancient</option><option value="de_anubis">Anubis</option><option value="de_overpass">Overpass</option></select></label><label>阵营<select id="rag-side"><option>T</option><option>CT</option></select></label><label>经济<select id="rag-economy"><option value="unknown">未知 / 不限制</option><option value="rifle">长枪局</option><option value="force">强起局</option><option value="eco">经济局</option><option value="pistol">手枪局</option></select></label><label>可配合人数<input type="number" id="rag-party" min="1" max="5" placeholder="未知"></label><label>全队存活人数<input type="number" id="rag-alive" min="1" max="5" placeholder="未知"></label><label>起点限制<input id="rag-origin" placeholder="例如 Roof；留空不限制"></label><label>动作限制<select id="rag-motion"><option value="">不限</option><option>Standing</option><option>Running</option><option>Crouched</option></select></label></div>
+<details><summary>已确认的配合成员道具总数（选填）</summary><p>只统计能配合的成员；空白代表未知，0 才代表确认没有。枪械和其他条件可写在需求中。</p><div class="controls"><label>烟雾弹<input type="number" id="rag-util-smoke" min="0" max="10" placeholder="未知"></label><label>闪光弹<input type="number" id="rag-util-flash" min="0" max="10" placeholder="未知"></label><label>燃烧弹<input type="number" id="rag-util-fire" min="0" max="10" placeholder="未知"></label><label>手雷<input type="number" id="rag-util-he" min="0" max="10" placeholder="未知"></label></div></details>
+<div class="actions"><button id="rag-start" class="mc-primary">开始研究</button><button type="button" id="rag-cancel" class="secondary" disabled>取消任务</button><button type="button" id="rag-resume" class="secondary" hidden>恢复上次任务</button></div><details class="research-service"><summary>模型与调用范围</summary><p class="privacy mc-note" id="rag-services">正在检查应用服务…</p><p class="privacy" id="rag-scope">应用会向已配置模型和公开搜索服务发送当前需求及必要的来源摘要。每次研究最多 6 次本地查询、8 条已读证据、3 次公开搜索 / 8 次页面读取 / 8 次模型调用。向量检索按现有设置使用本地或外部服务。缓存命中不重复发送。视频默认打开原链接。</p></details></form></div></aside>
+<div class="mc-panel research-output"><div class="mc-head"><i>07.B</i>研究结果<span class="mc-aside">依据与未知分别呈现</span></div><div class="mc-body"><section id="rag-progress" aria-live="polite"><p id="rag-message">准备好后开始。助手会先查本地，再补搜索和来源核对。</p><ol id="rag-phases"><li>理解需求</li><li>本地检索</li><li>补充搜索与读取</li><li>检查与整理</li></ol><p id="rag-usage"></p><details id="rag-retrieval" hidden><summary>检索过程与来源读取</summary><ol id="rag-retrievalTrace"></ol></details></section><section id="rag-results"><div class="research-empty"><span class="mc-mono">EVIDENCE FIRST</span><h2>从一个具体问题开始</h2><p>查找战术、道具和比赛案例。每条判断可以展开核对来源。</p></div></section></div></div>
+</section>
 </main>
 
 <section id="comparisonViewer" hidden aria-label="双比赛对照">
@@ -242,5 +250,6 @@
   <section class="comparison-analysis"><h2>解释差异与改法</h2><p id="comparisonSend"></p><label class="check"><input id="comparisonConsent" type="checkbox">允许发送上述匿名证据进行本次对照</label><button id="analyzeComparison" class="mc-primary">让 Agent 分析对照（最多 2 次）</button><button id="cancelComparison" hidden>取消</button><p id="comparisonAgentStatus"></p><div id="comparisonFindings"></div></section>
 </section>
 <script src="/cs-icons.js"></script><script src="/replay-engine.js"></script><script src="/demo-review.js"></script><script src="/demo-compare.js"></script><script src="/demo-workbench.js"></script><script src="/tactic-board.js"></script><script src="/player-hub.js"></script><script src="/movement.js"></script>
+<script type="module" src="/research-workspace.js"></script>
 </body>
 </html>

@@ -29,12 +29,14 @@ OUTPUT_LIMIT=1800
 PHASES=['get_tactic_requirements','search_local_lineups','research_missing_lineups','compose_execution_plan']
 
 def validate_request(raw):
-    allowed={'query','mode','map','side','party_size','origin','motion','throw','team','source_case'}
+    allowed={'query','mode','map','side','party_size','origin','motion','throw','team','source_case','economy','alive_players','utility'}
     if not isinstance(raw,dict) or set(raw)-allowed:raise ValueError('Unsupported research fields')
     q=raw.get('query','').strip()
     if not 1<=len(q)<=300:raise ValueError('Enter a request of 1..300 characters')
     mode=raw.get('mode','single')
-    if mode not in {'single','tactic','case'}:raise ValueError('Invalid mode')
+    if mode not in {'single','tactic','case','rag'}:raise ValueError('Invalid mode')
+    if raw.get('economy','unknown') not in {'unknown','pistol','rifle','eco','force'}:raise ValueError('Invalid economy')
+    if mode=='rag' and raw.get('team') is not None:raise ValueError('Use the Nuke execution workflow for per-player equipment checks')
     map_name=raw.get('map','de_nuke')
     if not isinstance(map_name,str) or not re.fullmatch(r'de_[a-z0-9]{2,20}',map_name):raise ValueError('Invalid map')
     for token,name in [('nuke','de_nuke'),('mirage','de_mirage'),('inferno','de_inferno'),('dust2','de_dust2'),('ancient','de_ancient'),('anubis','de_anubis')]:
@@ -43,11 +45,18 @@ def validate_request(raw):
     if raw.get('source_case'):
         from .tactic_cases import get
         case=get(raw['source_case'])
-        if mode not in {'single','case'} or case['map']!=map_name:raise ValueError('案例教学需按原地图逐项研究，不能套用固定战术模板')
+        if mode not in {'single','case','rag'} or case['map']!=map_name:raise ValueError('案例教学需按原地图逐项研究，不能套用固定战术模板')
     if mode=='case' and not raw.get('source_case'):raise ValueError('整套案例教学必须选择有效案例')
     if mode=='case' and raw.get('team') is not None:raise ValueError('案例教学使用原回合装备证据')
-    party=raw.get('party_size',1)
-    if type(party) is not int or not 1<=party<=5:raise ValueError('Invalid party size')
+    party=raw.get('party_size',None if mode=='rag' else 1)
+    if not (mode=='rag' and party is None) and (type(party) is not int or not 1<=party<=5):raise ValueError('Invalid party size')
+    alive=raw.get('alive_players')
+    if alive is not None and (type(alive) is not int or not 1<=alive<=5):raise ValueError('Invalid alive count')
+    if alive is not None and party is not None and party>alive:raise ValueError('Confirmed cooperating count exceeds alive count')
+    utility=raw.get('utility')
+    if utility is not None:
+        if not isinstance(utility,dict) or set(utility)-{'smoke','flash','fire','he','decoy'}:raise ValueError('Invalid utility')
+        if any(type(v) is not int or not 0<=v<=10 for v in utility.values()):raise ValueError('Invalid utility count')
     origin=raw.get('origin',[])
     if not isinstance(origin,list) or len(origin)>5 or any(not isinstance(x,str) or not 1<=len(x)<=40 for x in origin):raise ValueError('Invalid start areas')
     if raw.get('motion') not in {None,'Standing','Running','Crouched'}:raise ValueError('Invalid motion')
@@ -342,14 +351,14 @@ class Research:
                 self.state['agent']={'kernel':'Eregion AgentLoop','status':'model_not_configured','model_calls':0}
                 for method in [self.requirements,self.local,self.research_missing,self.compose][self.state['phase']:]:method({})
                 self.state['status']='partial_model_not_configured';return
-            config={**config,'max_tokens':min(config['max_tokens'],getattr(self,'output_limit',OUTPUT_LIMIT)),'timeout':min(config['timeout'],45)}
+            config={**config,'max_tokens':min(config['max_tokens'],getattr(self,'output_limit',OUTPUT_LIMIT)),'timeout':min(config['timeout'],getattr(self,'request_timeout_limit',45))}
             model=ConfiguredModel(config)
             self.host=getattr(self,'host_class',ResearchHost)(self,model)
             self.state['agent']={'kernel':'Eregion AgentLoop','status':'running','destination_host':urlsplit(config['endpoint']).hostname,
                                  'model_calls':self.host.state['calls'],'max_calls':self.host.state['max_calls'],
                                  'input_reservation_limit':getattr(self,'input_limit',INPUT_LIMIT),'max_output_tokens_per_call':config['max_tokens'],'cost':None}
             self.save()
-            self.host.run(slice_steps=WHOLE_LIMIT if self.request['mode']=='tactic' else SINGLE_LIMIT)
+            self.host.run(slice_steps=self.host.state['max_calls'])
             self.state['agent'].update(status=self.host.state['status'],model_calls=self.host.state['calls'],
                                        usage=self.host.ledger.summary(task_id=self.directory.name),
                                        input_reserved=self.host.state.get('input_reserved',0))
@@ -412,6 +421,9 @@ class ResearchHost(WorkspaceHost):
         self.research.state['agent']['model_calls']=self.state['calls'];self.research.save()
 
 def research_class(request):
+    if request.get('mode')=='rag':
+        from .agentic_rag import AgentRagResearch
+        return AgentRagResearch
     if request.get('mode')=='case':
         from .case_learning import CaseResearch
         return CaseResearch
@@ -456,7 +468,10 @@ def get_job(identifier):
             recovered.compose({});recovered.state['phase']=phase
             recovered.state['recovered_from_saved_evidence']=True;recovered.save();state=recovered.state
         finally:recovered.sources.close()
-    return {k:state.get(k) for k in ['id','status','phase','request','budget','result','agent']}
+    result={k:state.get(k) for k in ['id','status','phase','request','budget','result','agent']}
+    if state.get('rag'):
+        result.update(retrieval_trace=state['rag']['trace'],retrieval_engine=state['rag']['version'])
+    return result
 def cancel_job(identifier):
     with JOB_LOCK:job=JOBS.get(identifier)
     if not job:raise ValueError('No active job')
